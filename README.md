@@ -35,21 +35,36 @@ pnpm config:ai # 把 AI 配置写进 Redis（交互式，密钥不落盘）
 | `AI_BASE_URL` | 否 | 默认 `https://api.deepseek.com` |
 | `AI_MODEL` | 否 | 默认 `deepseek-flash` |
 | `AI_API_KEY` | 否 | **本地开发用**；生产环境不要配，留给 Redis |
-| `UPSTASH_REDIS_REST_URL` | 生产必填 | Upstash REST 地址 |
-| `UPSTASH_REDIS_REST_TOKEN` | 生产必填 | Upstash REST Token |
+| `UPSTASH_REDIS_REST_URL` | 否 | Upstash REST 地址；生产环境用 Vercel Storage 连接时不用手配 |
+| `UPSTASH_REDIS_REST_TOKEN` | 否 | 同上 |
 | `REDIS_NAMESPACE` | 否 | 默认 `yilin:` |
 | `RATE_LIMIT_BURST` | 否 | 突发窗口，默认 `2/10s` |
 | `RATE_LIMIT_PER_HOUR` | 否 | 默认 20（按分块数扣额度） |
 | `RATE_LIMIT_PER_DAY` | 否 | 默认 50 |
 | `AI_DAILY_BUDGET` | 否 | 全站每日分块预算，默认 2000 |
 
-**AI 配置的优先级是「环境变量优先，Redis 兜底」。** 所以生产环境请不要设置 `AI_API_KEY`，改 Key 时只改 Redis，不必重新部署：
+### Redis 怎么接
 
-```bash
-pnpm config:ai   # 交互式输入，写进 yilin:config:ai
-```
+**生产环境**：在 Vercel 项目的 **Storage** 里连接 Upstash 数据库即可，不用手动配任何 Redis 变量。连接后 Vercel 会自动注入 `KV_REST_API_URL`、`KV_REST_API_TOKEN`、`KV_URL`、`REDIS_URL` 等变量，`lib/redis.ts` 的读取顺序是 `UPSTASH_REDIS_REST_*` → `KV_REST_API_*`，所以开箱即用。
+
+> 注意：**不要在连接 Storage 的同时又手动配 `UPSTASH_REDIS_REST_URL`**。手配的 URL 优先级更高，会和集成注入的 `KV_REST_API_TOKEN` 配成「URL 和 Token 来自不同来源」的一对。
+
+**本地开发**：在 `.env.local` 里填 `UPSTASH_REDIS_REST_URL` 和 `UPSTASH_REDIS_REST_TOKEN`。不填也能跑，限流会降级成进程内计数。
 
 Upstash 只支持 0 号库（`SELECT 2` 会报 `ERR Only 0th database is supported!`），所以这里用 `yilin:` 前缀做命名空间，与同一实例上 activation-service 的 `code:*` 互不干扰。
+
+### AI Key 放哪
+
+**AI 配置的优先级是「环境变量优先，Redis 兜底」**，两种放法都行：
+
+| 放法 | 换 Key 时 | 适用 |
+|---|---|---|
+| Vercel 环境变量 `AI_API_KEY` | 要 Redeploy 一次 | 简单直接，当前线上就是这种 |
+| 写进 Redis（`pnpm config:ai`） | 改完立即生效，不用重新部署 | 需要频繁轮换 Key 时 |
+
+改用 Redis 托管时，记得把 Vercel 上的 `AI_API_KEY` 删掉，否则环境变量会盖住 Redis 里的值。
+
+**环境变量改完必须 Redeploy 才会生效**，Vercel 不会自动重建。
 
 ## 目录结构
 

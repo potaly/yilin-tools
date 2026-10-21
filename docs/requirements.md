@@ -261,8 +261,8 @@
 | `AI_BASE_URL` | 否 | 默认 `https://api.deepseek.com` |
 | `AI_MODEL` | 否 | 默认 `deepseek-flash` |
 | `AI_API_KEY` | 否* | 本地开发用；**线上不配**，留给 Redis 托管（见下） |
-| `UPSTASH_REDIS_REST_URL` | 是 | `https://ethical-ghoul-90314.upstash.io` |
-| `UPSTASH_REDIS_REST_TOKEN` | 是 | Upstash REST Token（待提供） |
+| `UPSTASH_REDIS_REST_URL` | 否 | 本地开发用；生产通过 Vercel Storage 连接 Upstash，自动注入 `KV_REST_API_*`，代码会回退读取 |
+| `UPSTASH_REDIS_REST_TOKEN` | 否 | 同上 |
 | `REDIS_NAMESPACE` | 否 | 默认 `yilin:` |
 | `RATE_LIMIT_BURST` | 否 | 突发窗口，默认 `2/10s` |
 | `RATE_LIMIT_PER_HOUR` | 否 | 默认 20（按分块数扣额度） |
@@ -314,8 +314,8 @@ Redis 键（Upstash 只有 0 号库，用前缀隔离，不与 activation-servic
 
 | 项 | 状态 |
 |---|---|
-| DeepSeek API Key | **待用户提供**（只写进 Redis 与本地 `.env.local`，不进仓库） |
-| `UPSTASH_REDIS_REST_TOKEN` | **待用户提供**（REST Token，非 TCP 密码） |
+| DeepSeek API Key | 已由用户配在 Vercel 的 `AI_API_KEY`（Production）；本地在 `.env.local`，均不进仓库 |
+| Upstash 凭据 | 已通过 Vercel Storage 连接 `keyseal_moments`，由平台注入，无需人工保管 |
 | 本机缺 `pnpm` / `gh` | 用 `corepack enable pnpm` 启用；GitHub 推送走 https + 现有 git 凭据 |
 | Node 24 + Next 14.2 | 需在脚手架阶段先验证 `pnpm build`；失败则改用 Node 20 或升 Next 15（届时告知） |
 | `next/font/google` 构建期需访问 Google | Vercel 构建无障碍；本机若无代理则改 `next/font/local` 自带 woff2 |

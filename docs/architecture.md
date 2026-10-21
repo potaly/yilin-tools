@@ -270,7 +270,9 @@ vitest（node 环境），覆盖纯逻辑；UI 与 Canvas 靠人工验收（需�
 ## 8. 部署
 
 - `vercel.json`：`installCommand: "pnpm install"`、`framework: "nextjs"`、`regions: ["hkg1"]`。
-- Vercel 环境变量：`UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`、`AI_BASE_URL`、`AI_MODEL`；**不配 `AI_API_KEY`**，让 Redis 里的值生效（改 Key 无需重新部署）。
+- Redis 走 Vercel **Storage → Upstash for Redis**，把已有的 `keyseal_moments` 数据库连到本项目即可；Vercel 自动注入 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 等变量，`getRedis()` 的回退顺序 `UPSTASH_REDIS_REST_*` → `KV_REST_API_*` 正好吃得上。**此时不要再手配 `UPSTASH_REDIS_REST_URL`**，否则 URL 与 Token 会来自不同来源。
+- Vercel 环境变量：`AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY`（当前线上放在这里；若要做到换 Key 不重新部署，改为 `pnpm config:ai` 写进 Redis 并删掉该变量）。
+- 环境变量改动需要 Redeploy 才生效。
 - `AI_MODEL` 默认 `deepseek-flash`（DeepSeek 官方文档当前列出 `deepseek-flash` 与 `deepseek-v4-pro`，`deepseek-chat` 已不在文档中），base URL `https://api.deepseek.com`。
 - API Key 写入：本地 `pnpm tsx scripts/set-ai-config.ts`，交互式输入后写 `yilin:config:ai`；Key 不落盘、不进仓库、线上无写入接口。
 - push `main` 自动触发生产部署。
