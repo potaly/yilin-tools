@@ -8,7 +8,7 @@
 
 import 'server-only';
 import { Ratelimit } from '@upstash/ratelimit';
-import { getRedis, nsKey } from '@/lib/redis';
+import { getRedis, getUpstashRedis, nsKey } from '@/lib/redis';
 
 export interface GuardFail {
   ok: false;
@@ -66,7 +66,7 @@ const ephemeralCache = new Map<string, number>();
 const limiters = new Map<string, Ratelimit>();
 
 function limiter(name: string, limit: number, seconds: number): Ratelimit | null {
-  const redis = getRedis();
+  const redis = getUpstashRedis();
   if (!redis) return null;
   const key = `${name}:${limit}:${seconds}`;
   let found = limiters.get(key);

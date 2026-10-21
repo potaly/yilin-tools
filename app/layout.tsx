@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import AccountChip from './AccountChip';
 import { SITE, TOOLS, toolPath } from '@/lib/site';
 import './globals.css';
 
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {t.name}
                 </a>
               ))}
+              <AccountChip />
             </nav>
           </div>
         </header>
