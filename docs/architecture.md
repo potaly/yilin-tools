@@ -143,6 +143,7 @@ drawPage(ops, { height, info, metrics, fontFamily }): HTMLCanvasElement
 deliver(blob, filename, type): Promise<'shared' | 'downloaded' | 'cancelled'>
 // 触摸设备且支持 canShare({files}) 时走 navigator.share，否则 <a download>
 savePage(page)                     // 单张 PNG
+saveAllImages(pages, zipName)      // 手机分享多张 PNG，失败或桌面端回落到 zip
 saveZip(pages, filename)           // 动态 import jszip
 savePdf(pages, size, filename)
 // 动态 import jspdf；unit:'px'，format 直接用 [1080, 卡片高度]，一页一张图，不在 PDF 里重排文字
@@ -309,6 +310,7 @@ vitest（node 环境），覆盖纯逻辑；UI 与 Canvas 靠人工验收（需�
 | 16 | 关掉模型思考（`thinking: {type:'disabled'}`），不做流式输出 | 实测 deepseek-flash 开思考时先产 1500–3000 个推理 token 才输出正文，流式下首个正文分片要等到 10.2–13.8s，比整次非流式调用（7s）还晚；关掉后推理 token 归零，质量不降（覆盖率 0.991 vs 0.960，段长 60 字 vs 51 字）。上游耗时本身在 0.2–35s 间大幅波动，这是服务端负载，不是客户端能优化的 |
 | 18 | 颜色从排版层彻底剥离，`Unit` 只带 `bold` 标记 | 换模板不该影响分页。现在 `tokenize`/`paginate` 完全不知道颜色，绘制时才按 (kind, bold) + 模板解析颜色；副作用是加模板不用动排版代码，也不用重跑分页测试 |
 | 19 | 封面页不走分页器，单独一个 `cover.ts` | 封面是居中排版、标题字号自适应（128→70 五档），和正文的流式分页是两套逻辑，混在一起会把分页器搞复杂 |
+| 22 | 手机上「保存全部」分享多张 PNG 而非 zip | 系统分享面板是按文件类型给选项的：zip 只有「存储到文件」，多张 PNG 才有「存储 N 张图像」直接进相册。用户主要在手机上用，进相册才是真正要的结果 |
 | 21 | 隐形字符分三层处理，而不是只在清理里做 | 用户可能根本不点「快速清理」就直接设标题，所以 `parse()` 必须自己容错；编辑器入口只规范换行不动空格，避免把中文输入法打出的全角空格也改掉 |
 | 20 | 自己实现撤销栈并接管 Cmd+Z | 受控 textarea + 程序化改值会让浏览器原生撤销栈失效（实测 Cmd+Z 无反应），而手机端根本没有快捷键，只能靠按钮。连续输入按 700ms 停顿合并成一步，否则一个字一步 |
 | 17 | 点「AI 排版」先本地跑一遍 `clean()` | 规则清理是纯本地的，0 延迟就能让卡片动起来；AI 结果回来再替换。上游再慢也不会出现「点了没反应」。失败则回滚到原文 |

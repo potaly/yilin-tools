@@ -5,7 +5,13 @@ import { cardFont } from '@/app/fonts';
 import { clean, normalizeInput } from '@/lib/cards/clean';
 import { drawCover } from '@/lib/cards/cover';
 import { drawPage, footerHeight } from '@/lib/cards/draw';
-import { savePage, savePdf, saveZip, type PageImage } from '@/lib/cards/export';
+import {
+  isTouchDevice,
+  saveAllImages,
+  savePage,
+  savePdf,
+  type PageImage,
+} from '@/lib/cards/export';
 import { createCanvasMeasurer } from '@/lib/cards/linebreak';
 import {
   pushSnapshot,
@@ -66,6 +72,7 @@ export default function LongformCards() {
   const [canRedo, setCanRedo] = useState(false);
   const [toast, setToast] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [onPhone, setOnPhone] = useState(false);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const past = useRef<Snapshot[]>([]);
@@ -191,6 +198,8 @@ export default function LongformCards() {
     document.fonts.addEventListener('loadingdone', onDone);
     return () => document.fonts.removeEventListener('loadingdone', onDone);
   }, [render]);
+
+  useEffect(() => setOnPhone(isTouchDevice()), []);
 
   // 点完格式按钮把光标放回原处，不然每点一次都要重新选
   useEffect(() => {
@@ -369,10 +378,10 @@ export default function LongformCards() {
       const images = pages.map((p) => p.image);
       const result =
         kind === 'zip'
-          ? await saveZip(images, `${slug}.zip`)
+          ? await saveAllImages(images, `${slug}.zip`)
           : await savePdf(images, { width: 1080, height: RATIO_HEIGHT[ratio] }, `${slug}.pdf`);
       if (result === 'downloaded') say(kind === 'zip' ? '图片已打包下载' : 'PDF 已下载');
-      else if (result === 'shared') say('已发送');
+      else if (result === 'shared') say(kind === 'zip' ? '选「存储图像」就进相册了' : '已发送');
     } catch {
       say('导出失败了，请重试');
     } finally {
@@ -694,7 +703,7 @@ export default function LongformCards() {
                   disabled={empty || busy !== null}
                   onClick={() => exportAll('zip')}
                 >
-                  {busy === 'zip' ? '打包中…' : '保存全部图片'}
+                  {busy === 'zip' ? '保存中…' : onPhone ? `全部存到相册（${pages.length}）` : '保存全部图片'}
                 </button>
                 <button
                   className="btn btnSm"
@@ -706,6 +715,12 @@ export default function LongformCards() {
                 </button>
               </div>
             </div>
+
+            {onPhone && !empty && (
+              <p className={styles.saveTip}>
+                点「全部存到相册」会弹出系统分享，选「存储 {pages.length} 张图像」即可。
+              </p>
+            )}
 
             {empty ? (
               <p className={styles.empty}>在左边粘贴文字，这里会实时排好卡片。</p>

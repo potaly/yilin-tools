@@ -547,3 +547,14 @@
 .syntaxBox .syntax {
   padding-top: 6px;
 }
+
+/* 手机上的保存提示 */
+.saveTip {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  background: var(--accent-soft);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  margin: 0;
+}
