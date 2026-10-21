@@ -7,6 +7,7 @@ import { drawCover } from '@/lib/cards/cover';
 import { drawPage, footerHeight } from '@/lib/cards/draw';
 import { savePage, savePdf, saveZip, type PageImage } from '@/lib/cards/export';
 import { createCanvasMeasurer } from '@/lib/cards/linebreak';
+import { clearHeading, toggleBold, toggleHeading, type MarkupResult } from '@/lib/cards/markup';
 import { dropEmptyPages, paginate } from '@/lib/cards/paginate';
 import { makeSlug, parse, plain, toEditorText, wordCount } from '@/lib/cards/parse';
 import { SAMPLE } from '@/lib/cards/sample';
@@ -57,6 +58,8 @@ export default function LongformCards() {
   const [toast, setToast] = useState('');
   const [elapsed, setElapsed] = useState(0);
 
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const pendingSelection = useRef<[number, number] | null>(null);
   const seq = useRef(0);
   const urls = useRef<string[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -177,6 +180,16 @@ export default function LongformCards() {
     return () => document.fonts.removeEventListener('loadingdone', onDone);
   }, [render]);
 
+  // 点完格式按钮把光标放回原处，不然每点一次都要重新选
+  useEffect(() => {
+    const sel = pendingSelection.current;
+    const el = editorRef.current;
+    if (!sel || !el) return;
+    pendingSelection.current = null;
+    el.focus();
+    el.setSelectionRange(sel[0], sel[1]);
+  }, [text]);
+
   // AI 排版期间走一个秒表，上游慢的时候让用户看得见在动
   useEffect(() => {
     if (busy !== 'ai') return;
@@ -214,6 +227,15 @@ export default function LongformCards() {
     setUndo(snapshot);
     updateText(next);
   };
+
+  /** 对当前选区套用一个格式标记 */
+  function applyMarkup(fn: (text: string, start: number, end: number) => MarkupResult) {
+    const el = editorRef.current;
+    if (!el) return;
+    const result = fn(text, el.selectionStart, el.selectionEnd);
+    pendingSelection.current = [result.selectionStart, result.selectionEnd];
+    updateText(result.text);
+  }
 
   async function runAi() {
     if (!text.trim() || busy) return;
@@ -375,30 +397,72 @@ export default function LongformCards() {
                 </p>
               )}
 
+              <div className={styles.formatBar}>
+                <span className={styles.formatHint}>把光标放到某一行，或选中一段文字：</span>
+                <div className={styles.formatBtns}>
+                  <button
+                    className="btn btnSm"
+                    type="button"
+                    onClick={() => applyMarkup((t, a, b) => toggleHeading(t, a, b, 1))}
+                  >
+                    设为大标题
+                  </button>
+                  <button
+                    className="btn btnSm"
+                    type="button"
+                    onClick={() => applyMarkup((t, a, b) => toggleHeading(t, a, b, 2))}
+                  >
+                    设为小标题
+                  </button>
+                  <button
+                    className="btn btnSm"
+                    type="button"
+                    onClick={() => applyMarkup(toggleBold)}
+                  >
+                    加粗
+                  </button>
+                  <button
+                    className="btn btnQuiet btnSm"
+                    type="button"
+                    onClick={() => applyMarkup(clearHeading)}
+                  >
+                    变回正文
+                  </button>
+                </div>
+              </div>
+
               <textarea
+                ref={editorRef}
                 className={styles.editor}
                 value={text}
                 spellCheck={false}
                 aria-label="要排版的文字"
-                placeholder={'在这里粘贴文字……\n\n# 开头加一个井号是大标题\n## 两个井号是小标题\n**两个星号包起来**是加粗'}
+                placeholder={
+                  '把你要做成图片的文字粘到这里。\n\n' +
+                  '不用懂格式：粘好之后，把光标放到想当标题的那一行，点上面的「设为大标题」就行。\n\n' +
+                  '或者直接点「AI 排版」，让 AI 帮你分好段、起好标题。'
+                }
                 onChange={(e) => updateText(e.target.value)}
               />
 
-              <div className={styles.syntax}>
-                <span>
-                  <code># 文字</code>大标题
-                </span>
-                <span>
-                  <code>## 文字</code>小标题
-                </span>
-                <span>
-                  <code>**文字**</code>加粗
-                </span>
-                <span>每一行是一段</span>
-                <span>
-                  <code>#话题</code>这种不带空格的不会变成标题
-                </span>
-              </div>
+              <details className={styles.syntaxBox}>
+                <summary>想自己敲格式？点这里看写法</summary>
+                <div className={styles.syntax}>
+                  <span>
+                    <code># 文字</code>大标题（井号后面要有空格）
+                  </span>
+                  <span>
+                    <code>## 文字</code>小标题
+                  </span>
+                  <span>
+                    <code>**文字**</code>加粗
+                  </span>
+                  <span>每一行是一段，空行会被忽略</span>
+                  <span>
+                    <code>#话题</code>不带空格的话题标签不会变成标题
+                  </span>
+                </div>
+              </details>
             </div>
 
             <div className={styles.panel}>

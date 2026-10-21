@@ -70,6 +70,7 @@ lib/
     paginate.ts              # 分页
     draw.ts                  # Canvas 绘制
     clean.ts                 # 规则清理
+    markup.ts                # 给编辑器加格式标记的纯函数（标题 / 加粗）
     templates.ts             # 模板：配色 / 标题装饰 / 封面风格
     cover.ts                 # 独立封面页绘制
     export.ts                # 导出 PNG / ZIP / PDF，手机走系统分享
@@ -265,6 +266,7 @@ vitest（node 环境），覆盖纯逻辑；UI 与 Canvas 靠人工验收（需�
 | `paginate.test.ts` | 小标题与后两行正文同页；段落首行不孤立；3:4 / 3:5 页数 |
 | `validate.test.ts` | `normalize`；覆盖率 100% / 94% 边界；结构非法返回 null |
 | `chunk.test.ts` | 只在段落边界切；≤3000 字不切；合并只保留首块 title；density 按总字数重算 |
+| `markup.test.ts` | 标题开关与换级；跨行选中；空行跳过；加粗的加/去/空选区；话题标签不被当成已有标题 |
 | `ratelimit.test.ts` | `identify()`：IPv6 归并到 /64、`x-forwarded-for` 取首段、缺失回退 `unknown`；进程内降级限流器的窗口与 cost 扣减 |
 
 ---

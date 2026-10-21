@@ -252,6 +252,14 @@ button {
   font-size: 13.5px;
 }
 
+/* 触摸设备上把小按钮撑到 40px，满足可点区域要求 */
+@media (pointer: coarse) {
+  .btnSm {
+    min-height: 40px;
+    padding: 0 15px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
