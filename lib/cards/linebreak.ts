@@ -5,7 +5,7 @@
  * 于是断行规则可以在 node 下直接断言，不需要 jsdom 或 node-canvas。
  */
 
-import { COLORS, type BlockKind, type Metrics } from './spec';
+import type { BlockKind, Metrics } from './spec';
 
 /** 给定 CSS font 简写与文字，返回像素宽度 */
 export type Measurer = (font: string, text: string) => number;
@@ -14,7 +14,8 @@ export interface Unit {
   /** 这个单元的文字，空白统一规整为一个空格 */
   t: string;
   font: string;
-  color: string;
+  /** 是否处在 **加粗** 片段里；具体颜色由绘制层按模板决定 */
+  bold: boolean;
   space: boolean;
   w: number;
 }
@@ -67,13 +68,12 @@ export function tokenize(
     const bold = /^\*\*[^*]+\*\*$/.test(part);
     const content = bold ? part.slice(2, -2) : part.replace(/\*\*/g, '');
     const weight = kind === 'p' && bold ? spec.bw : spec.w;
-    const color = kind === 'p' ? (bold ? COLORS.bold : COLORS.body) : COLORS[kind];
     const font = fontOf(weight, spec.fs, fontFamily);
     for (const m of content.matchAll(TOKEN_RE)) {
       const s = m[0];
       const space = /^\s+$/.test(s);
       const t = space ? ' ' : s;
-      units.push({ t, font, color, space, w: measure(font, t) });
+      units.push({ t, font, bold, space, w: measure(font, t) });
     }
   }
   return units;

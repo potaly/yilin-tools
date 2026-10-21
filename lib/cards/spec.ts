@@ -22,17 +22,6 @@ export const CANVAS = {
   afterRule: 70,
 } as const;
 
-export const COLORS = {
-  bg: '#FDF9F3',
-  title: '#84461C',
-  h2: '#84461C',
-  body: '#8E5D36',
-  bold: '#76390F',
-  meta: '#AA8E74',
-  bar: '#EFE5DA',
-  rule: '#E8DED2',
-} as const;
-
 export const RATIO_HEIGHT: Record<Ratio, number> = {
   '3:5': 1800,
   '3:4': 1440,

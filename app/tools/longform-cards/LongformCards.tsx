@@ -3,12 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardFont } from '@/app/fonts';
 import { clean } from '@/lib/cards/clean';
-import { drawPage } from '@/lib/cards/draw';
+import { drawCover } from '@/lib/cards/cover';
+import { drawPage, footerHeight } from '@/lib/cards/draw';
 import { savePage, savePdf, saveZip, type PageImage } from '@/lib/cards/export';
 import { createCanvasMeasurer } from '@/lib/cards/linebreak';
 import { dropEmptyPages, paginate } from '@/lib/cards/paginate';
 import { makeSlug, parse, plain, toEditorText, wordCount } from '@/lib/cards/parse';
 import { SAMPLE } from '@/lib/cards/sample';
+import {
+  DEFAULT_TEMPLATE,
+  TEMPLATES,
+  templateById,
+  titleFamily,
+} from '@/lib/cards/templates';
 import {
   DENSITY_LABEL,
   RATIO_HEIGHT,
@@ -37,6 +44,10 @@ export default function LongformCards() {
   const [ratio, setRatio] = useState<Ratio>('3:5');
   const [densityChoice, setDensityChoice] = useState<DensityChoice>('auto');
   const [showMeta, setShowMeta] = useState(true);
+  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE.id);
+  const [useCover, setUseCover] = useState(false);
+  const [showPageNumber, setShowPageNumber] = useState(false);
+  const [author, setAuthor] = useState('');
 
   const [pages, setPages] = useState<{ url: string; image: PageImage }[]>([]);
   const [words, setWords] = useState(0);
@@ -74,19 +85,63 @@ export default function LongformCards() {
     const metrics = metricsFor(picked);
     const measure = createCanvasMeasurer();
     const info = { words: count, minutes: readingMinutes(count) };
+    const template = templateById(templateId);
+    const titleFont = titleFamily(template, FONT_FAMILY);
+    const footer = { pageNumber: showPageNumber, author };
 
-    const ops = blocks.length
-      ? dropEmptyPages(paginate(blocks, { height, showMeta, metrics, measure, fontFamily: FONT_FAMILY }))
+    // 开了封面页就把大标题抽出来单独成页，正文从第二页开始
+    const titleBlock = useCover ? blocks.find((b) => b.type === 'title') : undefined;
+    const flow = titleBlock ? blocks.filter((b) => b !== titleBlock) : blocks;
+
+    const ops = flow.length
+      ? dropEmptyPages(
+          paginate(flow, {
+            height,
+            showMeta,
+            metrics,
+            measure,
+            fontFamily: FONT_FAMILY,
+            titleFontFamily: titleFont,
+            footerH: footerHeight(footer),
+          }),
+        )
       : [];
+
+    const total = ops.length + (titleBlock ? 1 : 0);
+    const canvases: HTMLCanvasElement[] = [];
+    if (titleBlock) {
+      canvases.push(
+        drawCover({
+          height,
+          title: titleBlock.text,
+          subtitle: subtitleOf(flow),
+          template,
+          footer,
+          fontFamily: FONT_FAMILY,
+          titleFontFamily: titleFont,
+          measure,
+        }),
+      );
+    }
+    ops.forEach((page, i) =>
+      canvases.push(
+        drawPage(page, {
+          height,
+          info,
+          metrics,
+          fontFamily: FONT_FAMILY,
+          titleFontFamily: titleFont,
+          template,
+          footer,
+          pageNumber: i + 1 + (titleBlock ? 1 : 0),
+          pageCount: total,
+        }),
+      ),
+    );
+
     const blobs = await Promise.all(
-      ops.map(
-        (page) =>
-          new Promise<Blob | null>((resolve) =>
-            drawPage(page, { height, info, metrics, fontFamily: FONT_FAMILY }).toBlob(
-              resolve,
-              'image/png',
-            ),
-          ),
+      canvases.map(
+        (c) => new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/png')),
       ),
     );
     if (mine !== seq.current) return;
@@ -106,7 +161,7 @@ export default function LongformCards() {
     urls.current.forEach((u) => URL.revokeObjectURL(u));
     urls.current = next.map((p) => p.url);
     setPages(next);
-  }, [text, ratio, densityChoice, showMeta]);
+  }, [text, ratio, densityChoice, showMeta, templateId, useCover, showPageNumber, author]);
 
   // 输入防抖 300ms
   useEffect(() => {
@@ -349,6 +404,35 @@ export default function LongformCards() {
             <div className={styles.panel}>
               <span className={styles.panelTitle}>样式</span>
               <div className={styles.rows}>
+                <div className={`${styles.row} ${styles.rowStack}`}>
+                  <span className={styles.rowLabel}>
+                    模板
+                    <span className={styles.rowNote}>{templateById(templateId).desc}</span>
+                  </span>
+                  <div className={styles.swatches} role="radiogroup" aria-label="卡片模板">
+                    {TEMPLATES.map((t) => (
+                      <label key={t.id} className={styles.swatch}>
+                        <input
+                          type="radio"
+                          name="template"
+                          value={t.id}
+                          checked={templateId === t.id}
+                          onChange={() => setTemplateId(t.id)}
+                        />
+                        <span
+                          className={styles.swatchFace}
+                          style={{ background: t.colors.bg, borderColor: t.colors.rule }}
+                        >
+                          <span style={{ background: t.colors.title }} />
+                          <span style={{ background: t.colors.bar }} />
+                          <span style={{ background: t.colors.body }} />
+                        </span>
+                        <span className={styles.swatchName}>{t.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className={styles.row}>
                   <span className={styles.rowLabel}>
                     图片比例
@@ -384,6 +468,53 @@ export default function LongformCards() {
                       { value: 'standard', label: '标准' },
                       { value: 'compact', label: '紧凑' },
                     ]}
+                  />
+                </div>
+
+                <div className={styles.row}>
+                  <span className={styles.rowLabel}>
+                    封面页
+                    <span className={styles.rowNote}>大标题单独占第一页，正文从第二页开始</span>
+                  </span>
+                  <span className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={useCover}
+                      aria-label="用大标题做独立封面页"
+                      onChange={(e) => setUseCover(e.target.checked)}
+                    />
+                    <span className={styles.switchFace} />
+                  </span>
+                </div>
+
+                <div className={styles.row}>
+                  <span className={styles.rowLabel}>
+                    页码
+                    <span className={styles.rowNote}>每页右下角显示「2 / 6」</span>
+                  </span>
+                  <span className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={showPageNumber}
+                      aria-label="每页显示页码"
+                      onChange={(e) => setShowPageNumber(e.target.checked)}
+                    />
+                    <span className={styles.switchFace} />
+                  </span>
+                </div>
+
+                <div className={styles.row}>
+                  <span className={styles.rowLabel}>
+                    署名
+                    <span className={styles.rowNote}>写了就显示在每页左下角和封面上</span>
+                  </span>
+                  <input
+                    className={styles.textInput}
+                    value={author}
+                    maxLength={16}
+                    placeholder="@你的账号名"
+                    aria-label="署名"
+                    onChange={(e) => setAuthor(e.target.value)}
                   />
                 </div>
 
@@ -504,6 +635,14 @@ function Segmented({
       ))}
     </div>
   );
+}
+
+/** 封面副标题：取正文第一段的第一句，最多 42 字 */
+function subtitleOf(blocks: { type: string; text: string }[]): string {
+  const first = blocks.find((b) => b.type === 'p');
+  if (!first) return '';
+  const sentence = plain(first.text).split(/(?<=[。！？])/)[0] ?? '';
+  return sentence.length > 42 ? `${sentence.slice(0, 42)}…` : sentence;
 }
 
 /** 按当前文字里实际出现的字符加载三个字重，最多等 5 秒 */

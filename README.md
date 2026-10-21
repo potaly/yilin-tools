@@ -83,6 +83,10 @@ tests/          vitest 单测
 scripts/        set-ai-config.ts
 ```
 
+## 怎么加一套卡片模板
+
+在 `lib/cards/templates.ts` 的 `TEMPLATES` 里加一条即可：一套颜色（`bg` / `title` / `h2` / `body` / `bold` / `meta` / `bar` / `rule`，封面可选 `coverBg` / `coverInk`）、标题装饰方式（`highlight` / `underline` / `none`）、是否衬线标题。排版层不认识颜色，所以加模板不需要动分页代码，界面上的选择器会自动多出一个色块。
+
 ## 怎么加第二个工具
 
 1. 在 `lib/site.ts` 的 `TOOLS` 里加一条（slug / 名称 / 说明 / 图标）。

@@ -19,11 +19,12 @@ describe('tokenize', () => {
     expect(texts).toContain('32.5%');
   });
 
-  it('加粗片段用更重的字重与更深的颜色', () => {
+  it('加粗片段用更重的字重并标记为 bold，颜色留给绘制层', () => {
     const units = tokenize('这是**重点**', 'p', M, fakeMeasurer, FONT);
     const bold = units[units.length - 1];
     expect(bold.font).toContain(`${M.p.bw}`);
-    expect(bold.color).toBe('#76390F');
+    expect(bold.bold).toBe(true);
+    expect(units[0].bold).toBe(false);
   });
 });
 

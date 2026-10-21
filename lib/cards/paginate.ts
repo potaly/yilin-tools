@@ -18,12 +18,17 @@ export interface PaginateOptions {
   metrics: Metrics;
   measure: Measurer;
   fontFamily: string;
+  /** 衬线模板的标题字体族，不给就跟正文一致 */
+  titleFontFamily?: string;
+  /** 顶部留给页脚的高度，用于缩短可用版心 */
+  footerH?: number;
 }
 
 export function paginate(blocks: Block[], opts: PaginateOptions): PageOp[][] {
   const { height, showMeta, metrics, measure, fontFamily } = opts;
+  const titleFamily = opts.titleFontFamily || fontFamily;
   const maxW = CANVAS.w - 2 * CANVAS.mx;
-  const bottom = height - CANVAS.bottom;
+  const bottom = height - CANVAS.bottom - (opts.footerH ?? 0);
   const pages: PageOp[][] = [];
 
   let ops: PageOp[] = [];
@@ -48,7 +53,8 @@ export function paginate(blocks: Block[], opts: PaginateOptions): PageOp[][] {
 
   for (const b of blocks) {
     const spec = metrics[b.type];
-    const lines = breakLines(tokenize(b.text, b.type, metrics, measure, fontFamily), maxW);
+    const family = b.type === 'p' ? fontFamily : titleFamily;
+    const lines = breakLines(tokenize(b.text, b.type, metrics, measure, family), maxW);
     if (!lines.length) continue;
 
     let before = empty ? 0 : spec.before + prevAfter;
