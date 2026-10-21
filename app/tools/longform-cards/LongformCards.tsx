@@ -44,6 +44,7 @@ export default function LongformCards() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [undo, setUndo] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  const [elapsed, setElapsed] = useState(0);
 
   const seq = useRef(0);
   const urls = useRef<string[]>([]);
@@ -121,6 +122,14 @@ export default function LongformCards() {
     return () => document.fonts.removeEventListener('loadingdone', onDone);
   }, [render]);
 
+  // AI 排版期间走一个秒表，上游慢的时候让用户看得见在动
+  useEffect(() => {
+    if (busy !== 'ai') return;
+    setElapsed(0);
+    const timer = setInterval(() => setElapsed((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
+
   // 草稿：进来时读一次。
   // 保存只跟着用户的实际改动走，不用 useEffect——否则挂载那一轮会先用示例文字把草稿覆盖掉。
   useEffect(() => {
@@ -153,25 +162,38 @@ export default function LongformCards() {
 
   async function runAi() {
     if (!text.trim() || busy) return;
+    const original = text;
     setBusy('ai');
-    setNotice({ tone: 'info', text: 'AI 正在整理段落，长文可能需要 20 秒，请不要关掉页面。' });
+
+    // 先用规则清理出一版，点下去立刻能看到卡片变化，不用盯着转圈等
+    const quick = clean(original);
+    if (quick.trim() && quick.trim() !== original.trim()) {
+      setUndo(original);
+      updateText(quick);
+    }
+    setNotice({ tone: 'info', text: '已先做了一遍快速清理，AI 正在重新分段和提炼小标题。' });
+
     try {
       const res = await fetch('/api/ai-format', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: original }),
       });
       const data = await res.json();
       if (!res.ok) {
+        updateText(original); // 失败就回到原文，不留下半成品
+        setUndo(null);
         setNotice(null);
         say(data?.retryAfter ? `${data.error}（${data.retryAfter} 秒后可再试）` : (data?.error ?? '排版失败了'));
         return;
       }
-      replaceText(toEditorText(data), text);
+      replaceText(toEditorText(data), original);
       if (isDensity(data.density)) setDensityChoice(data.density);
       setNotice(data.warning ? { tone: 'warn', text: data.warning } : null);
       say('已排版，可以继续手改');
     } catch {
+      updateText(original);
+      setUndo(null);
       setNotice(null);
       say('网络不太稳，请再试一次');
     } finally {
@@ -265,7 +287,8 @@ export default function LongformCards() {
                 >
                   {busy === 'ai' ? (
                     <>
-                      <span className={styles.busy} aria-hidden="true" /> 排版中…
+                      <span className={styles.busy} aria-hidden="true" />{' '}
+                      {elapsed > 1 ? `排版中 ${elapsed}s…` : '排版中…'}
                     </>
                   ) : (
                     <>✦ AI 排版</>

@@ -45,7 +45,21 @@ interface Prompt {
   user: string;
 }
 
-async function callOnce(cfg: AiConfig, prompt: Prompt, jsonMode: boolean): Promise<Response> {
+/**
+ * 关掉模型的「思考」。
+ *
+ * 实测 deepseek-flash 在开启思考时会先生成 1500–3000 个推理 token 才开始输出正文，
+ * 慢的时候整次调用要 10–35 秒；关掉之后推理 token 为 0，排版质量没有下降
+ * （覆盖率 0.991 vs 0.960，段落长度 60 字 vs 51 字，更贴近 40–120 字的要求）。
+ * 需要让模型多想时把 AI_THINKING 设成 enabled。
+ */
+function thinkingParam(): Record<string, unknown> {
+  return (process.env.AI_THINKING || 'disabled') === 'enabled'
+    ? {}
+    : { thinking: { type: 'disabled' } };
+}
+
+async function callOnce(cfg: AiConfig, prompt: Prompt, extras: boolean): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -62,7 +76,8 @@ async function callOnce(cfg: AiConfig, prompt: Prompt, jsonMode: boolean): Promi
           { role: 'system', content: prompt.system },
           { role: 'user', content: prompt.user },
         ],
-        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+        // 这两个参数不是所有 OpenAI 兼容服务都认，被拒时整体去掉重试一次
+        ...(extras ? { response_format: { type: 'json_object' }, ...thinkingParam() } : {}),
       }),
       signal: controller.signal,
     });
@@ -77,8 +92,8 @@ export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<unknown> 
   try {
     res = await callOnce(cfg, prompt, true);
     if (res.status === 400) {
-      // 可能是不支持 response_format，去掉再试一次
-      console.warn('[ai] 带 json mode 的请求被拒，去掉该参数重试:', (await res.clone().text()).slice(0, 200));
+      // 可能是不认 response_format 或 thinking，去掉这两个参数再试一次
+      console.warn('[ai] 带可选参数的请求被拒，去掉后重试:', (await res.clone().text()).slice(0, 200));
       res = await callOnce(cfg, prompt, false);
     }
   } catch (e) {

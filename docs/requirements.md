@@ -166,7 +166,8 @@
 
 前端交互：
 
-- 点击后按钮变「排版中…」并禁用，显示进度说明「AI 正在整理段落，长文可能需要 20 秒」。
+- 点击后**立刻在本地跑一遍快速清理并重绘**，卡片马上有变化；AI 结果回来再替换，失败则回滚到原文。
+- 按钮变「排版中 N s…」（带秒表）并禁用，显示进度说明「已先做了一遍快速清理，AI 正在重新分段和提炼小标题」。
 - 成功：替换文本、自动切到 AI 建议的密度、toast「已排版，可继续修改」。
 - 失败：toast 显示接口返回的中文错误，**原文不动**。
 
@@ -260,7 +261,8 @@
 |---|---|---|
 | `AI_BASE_URL` | 否 | 默认 `https://api.deepseek.com` |
 | `AI_MODEL` | 否 | 默认 `deepseek-flash` |
-| `AI_API_KEY` | 否* | 本地开发用；**线上不配**，留给 Redis 托管（见下） |
+| `AI_THINKING` | 否 | `disabled`（默认，更快更省）/ `enabled` |
+| `AI_API_KEY` | 否* | 本地开发用；线上可配在 Vercel，也可写进 Redis（见下） |
 | `UPSTASH_REDIS_REST_URL` | 否 | 本地开发用；生产通过 Vercel Storage 连接 Upstash，自动注入 `KV_REST_API_*`，代码会回退读取 |
 | `UPSTASH_REDIS_REST_TOKEN` | 否 | 同上 |
 | `REDIS_NAMESPACE` | 否 | 默认 `yilin:` |
