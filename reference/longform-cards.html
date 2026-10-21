@@ -1,0 +1,435 @@
+<title>长文图卡生成器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: editor on the left (stacked on phones), rendered cards on the right; the app chrome stays quiet so the cards carry the color. */
+:root {
+  --bg: #F2EEE8;
+  --surface: #FFFFFF;
+  --ink: #33261C;
+  --muted: #86735F;
+  --line: #E1D7CA;
+  --accent: #86471D;
+  --accent-ink: #FFFFFF;
+  --mark: #EFE4D8;
+  --font: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1A1613; --surface: #241E19; --ink: #EEE4D9; --muted: #A9967F;
+    --line: #3A3129; --accent: #D59B6B; --accent-ink: #1A1613; --mark: #4A3A2C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1A1613; --surface: #241E19; --ink: #EEE4D9; --muted: #A9967F;
+  --line: #3A3129; --accent: #D59B6B; --accent-ink: #1A1613; --mark: #4A3A2C;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font);
+  font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-direction: column; gap: 4px; }
+h1 { margin: 0; font-size: 26px; font-weight: 900; line-height: 1.3; letter-spacing: 0.02em; }
+h1 span { background: linear-gradient(transparent 62%, var(--mark) 62%, var(--mark) 92%, transparent 92%); padding-right: 6px; }
+header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+  .editor { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+textarea {
+  width: 100%; min-height: 46vh; resize: vertical; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink); font: 500 15px/1.75 var(--font); padding: 12px 14px;
+}
+textarea:focus-visible, button:focus-visible, input:focus-visible + .seg-face { outline: 2px solid var(--accent); outline-offset: 2px; }
+.syntax { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.syntax code { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--ink); margin-right: 4px; }
+
+.options { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.opt { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg-face { display: block; padding: 4px 12px; font-size: 13px; cursor: pointer; color: var(--muted); }
+.seg input:checked + .seg-face { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+button { font: inherit; cursor: pointer; border-radius: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; font-size: 13px; }
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); padding: 8px 16px; font-size: 14px; font-weight: 700; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.stats { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); }
+.note { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 8px 12px; }
+
+.pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 18px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+figure img { display: block; width: 100%; height: auto; border-radius: 6px; box-shadow: 0 1px 2px rgba(60, 35, 15, 0.12), 0 6px 18px rgba(60, 35, 15, 0.10); background: #FDF9F3; }
+figcaption { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.empty { border: 1px dashed var(--line); border-radius: 8px; padding: 40px 16px; text-align: center; color: var(--muted); font-size: 14px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px); text-align: center; }
+@media (prefers-reduced-motion: no-preference) { .toast { transition: opacity .2s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span>长文图卡生成器</span></h1>
+    <p>粘贴文字，自动按手机比例分页，排成暖棕色的长文卡片，每页可存成图片。</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel editor" aria-label="编辑文字">
+      <div class="panel-head">
+        <span class="label">文字</span>
+        <div class="row">
+          <button class="btn" id="btn-sample" type="button">填入示例</button>
+          <button class="btn" id="btn-clear" type="button">清空</button>
+        </div>
+      </div>
+      <textarea id="src" spellcheck="false" placeholder="# 大标题&#10;&#10;第一段正文……&#10;&#10;## 小标题&#10;&#10;正文……"></textarea>
+      <div class="syntax">
+        <span><code>#</code>大标题</span>
+        <span><code>##</code>小标题</span>
+        <span><code>**文字**</code>加粗</span>
+        <span>每一行是一段</span>
+      </div>
+      <div class="options">
+        <div class="opt">
+          <span>比例</span>
+          <div class="seg" role="radiogroup" aria-label="图片比例">
+            <label><input type="radio" name="ratio" id="ratio-35" value="3:5" checked><span class="seg-face">3:5 长图</span></label>
+            <label><input type="radio" name="ratio" id="ratio-34" value="3:4"><span class="seg-face">3:4 小红书</span></label>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="opt-meta" checked>顶部显示字数和阅读时长</label>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="卡片预览">
+      <div class="panel-head">
+        <span class="stats" id="stats">正在排版…</span>
+        <button class="btn-primary" id="btn-zip" type="button" disabled>全部打包下载</button>
+      </div>
+      <div class="note" id="dl-note" hidden>这里不能直接保存文件。在手机上长按图片即可存到相册，电脑上右键图片另存为。</div>
+      <div class="pages" id="pages"></div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const SAMPLE = `# 开店三个月，我才明白社区烘焙店靠什么留住客人
+
+上个月帮楼下一家社区烘焙店梳理生意，店主一开口就叹气：
+“每天发新品图，朋友圈、小红书都在更，还搞了买二送一，回头客还是没几个。”
+后来我们只改了三件事。一个月后，周末的蛋糕预订排到了下周三。
+
+## 第一件事：别只拍面包，拍“谁在吃”
+
+很多店主觉得面包拍得越精致越好，天天发切面、拉丝、出炉特写。
+但附近的人买面包，很少是为了“买一件作品”，更多是为了**解决眼前的事**——孩子的早餐、下午的加班、周末的家庭聚会。
+所以我们把一半的内容换成了场景：放学时间排队的小朋友、加班族的“下午茶套餐”、周末来订生日蛋糕的一家三口。
+
+## 第二件事：把“新鲜”变成看得见的细节
+
+客人最在意的是什么？对宝妈来说，是“配料干不干净、孩子能不能吃”；对上班族来说，是“早上来不来得及买”。
+光写“每日新鲜现烤”，没人会记住。我们开始拍凌晨五点的操作台、手写的配料卡、当天没卖完的面包怎么处理。
+**信任不是喊出来的，是一点点让人看见的。**
+
+## 第三件事：给老客一个“再来一次”的理由
+
+买二送一能拉来一次性的客人，但留不住人。
+我们改成了“周卡”：每周三天，早上七点半前到店，取一份固定早餐。价格不变，但客人不用再想“明天早饭吃什么”。
+一个月下来，周卡卖出去四十多张。店主说，现在每天早上第一批客人，基本都是熟面孔。`;
+
+/* ---------- card spec (pixels at 1080 wide) ---------- */
+const C = {
+  w: 1080, mx: 66,
+  bg: '#FDF9F3', title: '#84461C', h2: '#84461C', body: '#8E5D36', bold: '#76390F',
+  meta: '#AA8E74', bar: '#EFE5DA', rule: '#E8DED2',
+  font: '"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif',
+  title: { fs: 128, lh: 170, before: 90, after: 76, w: 900 },
+  h2:    { fs: 70,  lh: 98,  before: 116, after: 30, w: 900 },
+  p:     { fs: 35,  lh: 70,  before: 44,  after: 0,  w: 500, bw: 900 },
+  metaY: 250, ruleY: 300, afterRule: 70, firstTopNoMeta: 170, top: 100, bottom: 110
+};
+const NO_START = new Set([...'，。、；：？！）》」』】〕”’…—·,.;:?!)%～']);
+const NO_END = new Set([...'（《「『【〔“‘(']);
+
+/* ---------- parsing ---------- */
+function parse(src) {
+  const blocks = [];
+  for (const raw of src.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(#{1,2})\s*(.*)$/);
+    if (m && m[2]) blocks.push({ type: m[1].length === 1 ? 'title' : 'h2', text: m[2] });
+    else if (!m) blocks.push({ type: 'p', text: line });
+  }
+  return blocks;
+}
+function plain(t) { return t.replace(/\*\*/g, ''); }
+function wordCount(blocks) {
+  return blocks.reduce((n, b) => n + plain(b.text).replace(/\s/g, '').length, 0);
+}
+
+/* ---------- measuring & line breaking ---------- */
+const mctx = document.createElement('canvas').getContext('2d');
+let wcache = new Map();
+function measure(font, t) {
+  const k = font + '\u0000' + t;
+  let w = wcache.get(k);
+  if (w === undefined) { mctx.font = font; w = mctx.measureText(t).width; wcache.set(k, w); }
+  return w;
+}
+function fontOf(weight, fs) { return `${weight} ${fs}px ${C.font}`; }
+
+function tokenize(text, kind) {
+  const spec = C[kind];
+  const units = [];
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  for (const part of parts) {
+    if (!part) continue;
+    const bold = /^\*\*[^*]+\*\*$/.test(part);
+    const t = bold ? part.slice(2, -2) : part.replace(/\*\*/g, '');
+    const weight = kind === 'p' && bold ? spec.bw : spec.w;
+    const color = kind === 'p' ? (bold ? C.bold : C.body) : C[kind];
+    const font = fontOf(weight, spec.fs);
+    for (const m of t.matchAll(/[A-Za-z0-9][A-Za-z0-9.,:%/'’+\-]*|\s+|[\s\S]/gu)) {
+      const s = m[0];
+      const space = /^\s+$/.test(s);
+      units.push({ t: space ? ' ' : s, font, color, space, w: measure(font, space ? ' ' : s) });
+    }
+  }
+  return units;
+}
+function sumW(arr) { return arr.reduce((n, u) => n + u.w, 0); }
+function trimEnd(arr) { while (arr.length && arr[arr.length - 1].space) arr.pop(); return arr; }
+
+function breakLines(units, maxW) {
+  const lines = [];
+  let cur = [], w = 0;
+  for (const u of units) {
+    if (!cur.length && u.space) continue;
+    if (w + u.w <= maxW || !cur.length) { cur.push(u); w += u.w; continue; }
+    let carry = u.space ? [] : [u];
+    while (cur.length > 1 && (
+      (carry.length && NO_START.has(carry[0].t)) || NO_END.has(cur[cur.length - 1].t)
+    )) carry.unshift(cur.pop());
+    trimEnd(cur);
+    lines.push({ units: cur, w: sumW(cur) });
+    cur = carry; w = sumW(cur);
+  }
+  trimEnd(cur);
+  if (cur.length) lines.push({ units: cur, w: sumW(cur) });
+  return lines;
+}
+
+/* ---------- pagination ---------- */
+function layout(blocks, H, showMeta) {
+  const maxW = C.w - 2 * C.mx, bottom = H - C.bottom;
+  const pages = [];
+  let ops = [], y, empty = true;
+  if (showMeta) {
+    ops.push({ type: 'meta', cy: C.metaY }, { type: 'rule', y: C.ruleY });
+    y = C.ruleY + C.afterRule;
+  } else y = C.firstTopNoMeta;
+  const newPage = () => { pages.push(ops); ops = []; y = C.top; empty = true; };
+  let prevAfter = 0;
+
+  for (const b of blocks) {
+    const spec = C[b.type];
+    const lines = breakLines(tokenize(b.text, b.type), maxW);
+    if (!lines.length) continue;
+    let before = empty ? 0 : spec.before + prevAfter;
+    // keep headings with what follows; avoid a paragraph's first line sitting alone at the bottom
+    const keepH = b.type === 'p'
+      ? spec.lh * Math.min(2, lines.length)
+      : lines.length * spec.lh + spec.after + C.p.before + C.p.lh * 2;
+    if (!empty && y + before + keepH > bottom) { newPage(); before = 0; }
+    y += before;
+    lines.forEach((ln, i) => {
+      if (y + spec.lh > bottom && !empty) newPage();
+      ops.push({ type: 'line', kind: b.type, line: ln, cy: y + spec.lh / 2, justify: i < lines.length - 1 });
+      y += spec.lh; empty = false;
+    });
+    prevAfter = spec.after;
+  }
+  pages.push(ops);
+  return pages;
+}
+
+/* ---------- drawing ---------- */
+function drawPage(ops, H, info) {
+  const cv = document.createElement('canvas');
+  cv.width = C.w; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const maxW = C.w - 2 * C.mx;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, C.w, H);
+  ctx.textBaseline = 'middle';
+  for (const op of ops) {
+    if (op.type === 'meta') {
+      const r = 14, cx = C.mx + r, cy = op.cy;
+      ctx.strokeStyle = C.meta; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy); ctx.lineTo(cx + 6, cy + 4); ctx.stroke();
+      ctx.font = fontOf(700, 32); ctx.fillStyle = C.meta;
+      ctx.fillText(`全文${info.words}字 ｜ 阅读需要${info.minutes}分钟`, C.mx + r * 2 + 16, cy + 1);
+    } else if (op.type === 'rule') {
+      ctx.fillStyle = C.rule; ctx.fillRect(C.mx, op.y, maxW, 3);
+    } else if (op.type === 'line') {
+      const spec = C[op.kind], units = op.line.units, n = units.length;
+      let gap = 0;
+      if (op.justify && n > 1) { gap = (maxW - op.line.w) / (n - 1); if (gap > spec.fs * 0.6) gap = 0; }
+      if (op.kind === 'title') {
+        const textW = op.line.w + gap * Math.max(0, n - 1);
+        const bw = op.justify && gap ? maxW : Math.min(maxW, textW + spec.fs * 0.55);
+        ctx.fillStyle = C.bar;
+        ctx.fillRect(C.mx, op.cy + spec.fs * 0.17, bw, spec.fs * 0.33);
+      }
+      let x = C.mx;
+      for (const u of units) {
+        if (!u.space) { ctx.font = u.font; ctx.fillStyle = u.color; ctx.fillText(u.t, x, op.cy); }
+        x += u.w + gap;
+      }
+    }
+  }
+  return cv;
+}
+
+/* ---------- fonts ---------- */
+async function ensureFonts(text) {
+  if (!document.fonts || !document.fonts.load) return;
+  const chars = [...new Set(plain(text).replace(/\s/g, '') + '全文字阅读需要分钟0123456789｜')].join('');
+  const loads = ['500 35px', '700 32px', '900 70px'].map(f => document.fonts.load(`${f} "Noto Sans SC"`, chars));
+  try { await Promise.race([Promise.all(loads), new Promise(r => setTimeout(r, 5000))]); } catch (e) {}
+}
+
+/* ---------- app ---------- */
+const $ = id => document.getElementById(id);
+const src = $('src'), pagesEl = $('pages'), statsEl = $('stats'), zipBtn = $('btn-zip'), noteEl = $('dl-note');
+let blobs = [], urls = [], slug = '长文图卡', seq = 0;
+
+const dlReady = (window.claude && typeof window.claude.use === 'function')
+  ? window.claude.use('downloads').catch(() => null)
+  : Promise.resolve(null);
+dlReady.then(dl => { if (!dl) { noteEl.hidden = false; zipBtn.hidden = true; document.querySelectorAll('.save-one').forEach(b => b.hidden = true); } });
+let dlAvailable = true;
+dlReady.then(dl => { dlAvailable = !!dl; });
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 2200);
+}
+function makeSlug(blocks) {
+  const t = blocks.find(b => b.type === 'title') || blocks[0];
+  const s = t ? plain(t.text).replace(/[\\/:*?"<>|\s！!，,。.]/g, '').slice(0, 16) : '';
+  return s || '长文图卡';
+}
+
+async function render() {
+  const my = ++seq;
+  const text = src.value;
+  try { localStorage.setItem('longform-cards-draft', text); } catch (e) {}
+  const blocks = parse(text);
+  await ensureFonts(text);
+  if (my !== seq) return;
+  wcache = new Map();
+  const H = document.querySelector('input[name="ratio"]:checked').value === '3:4' ? 1440 : 1800;
+  const showMeta = $('opt-meta').checked;
+  const words = wordCount(blocks);
+  const info = { words, minutes: Math.max(1, Math.ceil(words / 450)) };
+  const canvases = blocks.length ? layout(blocks, H, showMeta).filter((p, i) => i === 0 || p.length).map(p => drawPage(p, H, info)) : [];
+  const newBlobs = await Promise.all(canvases.map(c => new Promise(r => c.toBlob(r, 'image/png'))));
+  if (my !== seq) return;
+  urls.forEach(u => URL.revokeObjectURL(u));
+  blobs = newBlobs; urls = blobs.map(b => URL.createObjectURL(b));
+  slug = makeSlug(blocks);
+
+  pagesEl.replaceChildren();
+  if (!blobs.length) {
+    statsEl.innerHTML = '还没有内容';
+    zipBtn.disabled = true;
+    const e = document.createElement('div');
+    e.className = 'empty'; e.textContent = '在文字框里粘贴内容，这里会出现排好的卡片。';
+    pagesEl.append(e);
+    return;
+  }
+  statsEl.innerHTML = `全文 <b>${words}</b> 字 · 共 <b>${blobs.length}</b> 页`;
+  zipBtn.disabled = false;
+  urls.forEach((u, i) => {
+    const fig = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = u; img.alt = `第 ${i + 1} 页`; img.width = C.w; img.height = H;
+    const cap = document.createElement('figcaption');
+    const num = document.createElement('span'); num.textContent = `${i + 1} / ${blobs.length}`;
+    const btn = document.createElement('button');
+    btn.className = 'btn save-one'; btn.type = 'button'; btn.textContent = '保存这一页';
+    btn.hidden = !dlAvailable;
+    btn.addEventListener('click', () => saveOne(i));
+    cap.append(num, btn); fig.append(img, cap); pagesEl.append(fig);
+  });
+}
+
+function fileName(i) { return `${slug}-${String(i + 1).padStart(2, '0')}.png`; }
+async function doSave(filename, data) {
+  const dl = await dlReady;
+  if (!dl) { noteEl.hidden = false; return; }
+  try {
+    await dl.save({ filename, data });
+    toast('已保存');
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'declined') return;
+    if (code === 'rate_limited') toast('上一个保存还没结束，稍等再试');
+    else { noteEl.hidden = false; toast('这里没法保存文件，长按图片保存'); }
+  }
+}
+function saveOne(i) { if (blobs[i]) doSave(fileName(i), blobs[i]); }
+zipBtn.addEventListener('click', async () => {
+  if (!blobs.length) return;
+  if (typeof JSZip === 'undefined') { toast('打包组件没加载出来，请逐页保存'); return; }
+  zipBtn.disabled = true;
+  try {
+    const zip = new JSZip();
+    blobs.forEach((b, i) => zip.file(fileName(i), b));
+    const z = await zip.generateAsync({ type: 'blob' });
+    await doSave(`${slug}.zip`, z);
+  } finally { zipBtn.disabled = false; }
+});
+
+let timer;
+function schedule() { clearTimeout(timer); timer = setTimeout(render, 350); }
+src.addEventListener('input', schedule);
+document.querySelectorAll('input[name="ratio"]').forEach(r => r.addEventListener('change', render));
+$('opt-meta').addEventListener('change', render);
+$('btn-sample').addEventListener('click', () => { src.value = SAMPLE; render(); });
+$('btn-clear').addEventListener('click', () => { src.value = ''; render(); src.focus(); });
+if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', schedule);
+
+let draft = null;
+try { draft = localStorage.getItem('longform-cards-draft'); } catch (e) {}
+src.value = draft && draft.trim() ? draft : SAMPLE;
+render();
+</script>
