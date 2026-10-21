@@ -138,6 +138,17 @@ export function toFullWidthPunctuation(text: string): string {
   return marker + t;
 }
 
+/** 结尾连着两个以上话题标签（#养生赛道 #大健康）时，把它们拆成单独一段 */
+const TRAILING_TAGS = /(?:[ \t]*#[^\s#]+){2,}[ \t]*$/;
+
+export function splitTrailingTags(line: string): string[] {
+  const m = line.match(TRAILING_TAGS);
+  if (!m || m.index === undefined || m.index === 0) return [line];
+  const body = line.slice(0, m.index).trim();
+  const tags = m[0].trim().replace(/[ \t]{2,}/g, ' ');
+  return body ? [body, tags] : [tags];
+}
+
 /** 超过 limit 字的段落在句末标点处拆开；单句本身过长则不拆 */
 export function splitLongParagraph(line: string, limit = 150): string[] {
   if (line.length <= limit) return [line];
@@ -169,7 +180,9 @@ export function clean(input: string, limit = 150): string {
     }
     const normalized = toFullWidthPunctuation(removeCjkSpaces(line)).trim();
     if (!normalized) continue;
-    out.push(...splitLongParagraph(normalized, limit));
+    for (const piece of splitTrailingTags(normalized)) {
+      out.push(...splitLongParagraph(piece, limit));
+    }
   }
   return out.join('\n\n').trim() + (out.length ? '\n' : '');
 }

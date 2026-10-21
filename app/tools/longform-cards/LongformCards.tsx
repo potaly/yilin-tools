@@ -121,7 +121,8 @@ export default function LongformCards() {
     return () => document.fonts.removeEventListener('loadingdone', onDone);
   }, [render]);
 
-  // 草稿
+  // 草稿：进来时读一次。
+  // 保存只跟着用户的实际改动走，不用 useEffect——否则挂载那一轮会先用示例文字把草稿覆盖掉。
   useEffect(() => {
     try {
       const draft = localStorage.getItem(DRAFT_KEY);
@@ -131,21 +132,23 @@ export default function LongformCards() {
     }
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_KEY, text);
-    } catch {
-      /* 写不进去也不影响使用 */
-    }
-  }, [text]);
-
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   /* ---------- 操作 ---------- */
 
+  /** 改文字的唯一入口：顺手把草稿写进 localStorage */
+  const updateText = useCallback((next: string) => {
+    setText(next);
+    try {
+      localStorage.setItem(DRAFT_KEY, next);
+    } catch {
+      /* 写不进去也不影响使用 */
+    }
+  }, []);
+
   const replaceText = (next: string, snapshot: string) => {
     setUndo(snapshot);
-    setText(next);
+    updateText(next);
   };
 
   async function runAi() {
@@ -236,7 +239,7 @@ export default function LongformCards() {
               <div className={styles.panelHead}>
                 <span className={styles.panelTitle}>你的文字</span>
                 <div className={styles.toolbarRight}>
-                  <button className="btn btnQuiet btnSm" type="button" onClick={() => setText(SAMPLE)}>
+                  <button className="btn btnQuiet btnSm" type="button" onClick={() => updateText(SAMPLE)}>
                     填入示例
                   </button>
                   <button
@@ -277,7 +280,7 @@ export default function LongformCards() {
                   disabled={undo === null}
                   onClick={() => {
                     if (undo === null) return;
-                    setText(undo);
+                    updateText(undo);
                     setUndo(null);
                     setNotice(null);
                     say('已回到修改前');
@@ -300,20 +303,23 @@ export default function LongformCards() {
                 spellCheck={false}
                 aria-label="要排版的文字"
                 placeholder={'在这里粘贴文字……\n\n# 开头加一个井号是大标题\n## 两个井号是小标题\n**两个星号包起来**是加粗'}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => updateText(e.target.value)}
               />
 
               <div className={styles.syntax}>
                 <span>
-                  <code>#</code>大标题
+                  <code># 文字</code>大标题
                 </span>
                 <span>
-                  <code>##</code>小标题
+                  <code>## 文字</code>小标题
                 </span>
                 <span>
                   <code>**文字**</code>加粗
                 </span>
                 <span>每一行是一段</span>
+                <span>
+                  <code>#话题</code>这种不带空格的不会变成标题
+                </span>
               </div>
             </div>
 

@@ -5,6 +5,7 @@ import {
   mergeHardWraps,
   removeCjkSpaces,
   splitLongParagraph,
+  splitTrailingTags,
   stripInvisible,
   toFullWidthPunctuation,
 } from '@/lib/cards/clean';
@@ -130,5 +131,28 @@ describe('clean', () => {
   it('完整流程：合并硬换行、转全角、保留标题', () => {
     const out = clean('# 我的标题\n\n上个月帮楼下\n一家烘焙店梳理生意,店主叹气。\n\n\n下一段。');
     expect(out).toBe('# 我的标题\n\n上个月帮楼下一家烘焙店梳理生意，店主叹气。\n\n下一段。\n');
+  });
+});
+
+describe('话题标签', () => {
+  it('结尾的话题标签拆成单独一段', () => {
+    expect(splitTrailingTags('总结：方法对就行#养生赛道 #大健康 #IP打造')).toEqual([
+      '总结：方法对就行',
+      '#养生赛道 #大健康 #IP打造',
+    ]);
+  });
+
+  it('整行都是话题时不拆', () => {
+    const tags = '#养生赛道 #大健康 #内容创业';
+    expect(splitTrailingTags(tags)).toEqual([tags]);
+  });
+
+  it('只有一个井号词时不拆，避免误伤正文', () => {
+    expect(splitTrailingTags('他排在 #1')).toEqual(['他排在 #1']);
+  });
+
+  it('clean 之后话题独立成段且一字不改', () => {
+    const out = clean('能拍100条视频的人,不是天赋高,是方法对#养生赛道 #大健康  #IP打造');
+    expect(out.trim().split('\n\n').pop()).toBe('#养生赛道 #大健康 #IP打造');
   });
 });

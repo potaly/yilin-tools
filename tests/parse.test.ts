@@ -43,3 +43,28 @@ describe('parse', () => {
     expect(parse(text)).toHaveLength(3);
   });
 });
+
+describe('话题标签不是标题', () => {
+  it('小红书话题行原样保留为正文', () => {
+    const line = '#养生赛道 #大健康  #自媒体起号 #IP打造  #内容创业';
+    expect(parse(line)).toEqual([{ type: 'p', text: line }]);
+  });
+
+  it('井号后没有空格一律当正文', () => {
+    expect(parse('#标题样子的一行')).toEqual([{ type: 'p', text: '#标题样子的一行' }]);
+    expect(parse('##话题')).toEqual([{ type: 'p', text: '##话题' }]);
+  });
+
+  it('井号后有空格才是标题', () => {
+    expect(parse('# 大标题')).toEqual([{ type: 'title', text: '大标题' }]);
+    expect(parse('## 小标题')).toEqual([{ type: 'h2', text: '小标题' }]);
+  });
+
+  it('光秃秃的井号不产生任何块', () => {
+    expect(parse('#\n##')).toEqual([]);
+  });
+
+  it('正文里的井号不受影响', () => {
+    expect(parse('价格是 #1 的那个')).toEqual([{ type: 'p', text: '价格是 #1 的那个' }]);
+  });
+});

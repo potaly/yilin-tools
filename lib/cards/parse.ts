@@ -7,18 +7,22 @@ export interface Block {
   text: string;
 }
 
-/** `#` 大标题、`##` 小标题、其余每一行是一段，空行忽略 */
+/**
+ * `# ` 大标题、`## ` 小标题、其余每一行是一段，空行忽略。
+ *
+ * 井号后面必须跟空格才算标题（和标准 Markdown 一致）。
+ * 这样小红书的话题标签「#养生赛道 #大健康」才不会被当成大标题。
+ */
+const HEADING = /^(#{1,2})[ \t]+(\S.*)$/;
+
 export function parse(src: string): Block[] {
   const blocks: Block[] = [];
   for (const raw of src.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    const m = line.match(/^(#{1,2})\s*(.*)$/);
-    if (m && m[2]) {
-      blocks.push({ type: m[1].length === 1 ? 'title' : 'h2', text: m[2] });
-    } else if (!m) {
-      blocks.push({ type: 'p', text: line });
-    }
+    const m = line.match(HEADING);
+    if (m) blocks.push({ type: m[1].length === 1 ? 'title' : 'h2', text: m[2].trim() });
+    else if (!/^#{1,2}$/.test(line)) blocks.push({ type: 'p', text: line });
   }
   return blocks;
 }
