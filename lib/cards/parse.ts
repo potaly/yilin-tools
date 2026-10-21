@@ -1,0 +1,68 @@
+/** 编辑器文本 ⇄ 结构化 blocks */
+
+import type { BlockKind } from './spec';
+
+export interface Block {
+  type: BlockKind;
+  text: string;
+}
+
+/** `#` 大标题、`##` 小标题、其余每一行是一段，空行忽略 */
+export function parse(src: string): Block[] {
+  const blocks: Block[] = [];
+  for (const raw of src.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(#{1,2})\s*(.*)$/);
+    if (m && m[2]) {
+      blocks.push({ type: m[1].length === 1 ? 'title' : 'h2', text: m[2] });
+    } else if (!m) {
+      blocks.push({ type: 'p', text: line });
+    }
+  }
+  return blocks;
+}
+
+/** 去掉加粗标记，拿到纯文字 */
+export function plain(text: string): string {
+  return text.replace(/\*\*/g, '');
+}
+
+/** 全文字数：去掉所有空白后的字符数 */
+export function wordCount(blocks: Block[]): number {
+  return blocks.reduce((n, b) => n + plain(b.text).replace(/\s/g, '').length, 0);
+}
+
+const ILLEGAL_FILENAME = /[\\/:*?"<>|\s！!，,。.、；;：]/g;
+
+/** 用首个标题生成文件名前缀 */
+export function makeSlug(blocks: Block[]): string {
+  const t = blocks.find((b) => b.type === 'title') ?? blocks[0];
+  const s = t ? plain(t.text).replace(ILLEGAL_FILENAME, '').slice(0, 16) : '';
+  return s || '长文图卡';
+}
+
+export interface FormatBlock {
+  type: 'h2' | 'p';
+  text: string;
+}
+
+export interface FormatResult {
+  title: string;
+  blocks: FormatBlock[];
+  density: string;
+  notes?: string;
+  warning?: string;
+}
+
+/** AI 返回的结构 → 编辑器语法 */
+export function toEditorText(result: Pick<FormatResult, 'title' | 'blocks'>): string {
+  const lines: string[] = [];
+  if (result.title.trim()) lines.push(`# ${result.title.trim()}`, '');
+  for (const b of result.blocks) {
+    const text = b.text.trim();
+    if (!text) continue;
+    lines.push(b.type === 'h2' ? `## ${text}` : text, '');
+  }
+  return lines.join('\n').trimEnd() + '\n';
+}
