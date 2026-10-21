@@ -7,6 +7,14 @@ import { drawCover } from '@/lib/cards/cover';
 import { drawPage, footerHeight } from '@/lib/cards/draw';
 import { savePage, savePdf, saveZip, type PageImage } from '@/lib/cards/export';
 import { createCanvasMeasurer } from '@/lib/cards/linebreak';
+import {
+  pushSnapshot,
+  redoStep,
+  snapshot,
+  truncate,
+  undoStep,
+  type Snapshot,
+} from '@/lib/cards/history';
 import { clearHeading, toggleBold, toggleHeading, type MarkupResult } from '@/lib/cards/markup';
 import { dropEmptyPages, paginate } from '@/lib/cards/paginate';
 import { makeSlug, parse, plain, toEditorText, wordCount } from '@/lib/cards/parse';
@@ -54,11 +62,15 @@ export default function LongformCards() {
   const [words, setWords] = useState(0);
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [undo, setUndo] = useState<string | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [toast, setToast] = useState('');
   const [elapsed, setElapsed] = useState(0);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const past = useRef<Snapshot[]>([]);
+  const future = useRef<Snapshot[]>([]);
+  const lastRecord = useRef(0);
   const pendingSelection = useRef<[number, number] | null>(null);
   const seq = useRef(0);
   const urls = useRef<string[]>([]);
@@ -213,20 +225,72 @@ export default function LongformCards() {
 
   /* ---------- 操作 ---------- */
 
-  /** 改文字的唯一入口：顺手把草稿写进 localStorage */
-  const updateText = useCallback((next: string) => {
-    setText(next);
+  const saveDraft = useCallback((value: string) => {
     try {
-      localStorage.setItem(DRAFT_KEY, next);
+      localStorage.setItem(DRAFT_KEY, value);
     } catch {
       /* 写不进去也不影响使用 */
     }
   }, []);
 
-  const replaceText = (next: string, snapshot: string) => {
-    setUndo(snapshot);
-    updateText(next);
-  };
+  const syncHistoryFlags = useCallback(() => {
+    setCanUndo(past.current.length > 0);
+    setCanRedo(future.current.length > 0);
+  }, []);
+
+  /** 当前编辑状态，含光标位置 */
+  const currentSnapshot = useCallback((): Snapshot => {
+    const el = editorRef.current;
+    return snapshot(text, el?.selectionStart ?? text.length, el?.selectionEnd ?? text.length);
+  }, [text]);
+
+  /**
+   * 改文字的唯一入口。
+   * mode 为 'typing' 时把连续输入合并成一步（停顿 700ms 才开新的一步），
+   * 'action' 是按钮触发的整体改动，每次都单独记一步。
+   */
+  const updateText = useCallback(
+    (next: string, mode: 'typing' | 'action' = 'action') => {
+      const now = Date.now();
+      const shouldRecord = mode === 'action' || now - lastRecord.current >= 700;
+      if (shouldRecord) {
+        past.current = pushSnapshot(past.current, currentSnapshot());
+        future.current = [];
+        lastRecord.current = now;
+        syncHistoryFlags();
+      }
+      setText(next);
+      saveDraft(next);
+    },
+    [currentSnapshot, saveDraft, syncHistoryFlags],
+  );
+
+  const applySnapshot = useCallback(
+    (snap: Snapshot) => {
+      pendingSelection.current = [snap.selectionStart, snap.selectionEnd];
+      setText(snap.text);
+      saveDraft(snap.text);
+      lastRecord.current = 0; // 撤销之后再输入要开新的一步
+      syncHistoryFlags();
+    },
+    [saveDraft, syncHistoryFlags],
+  );
+
+  const doUndo = useCallback(() => {
+    const move = undoStep(past.current, future.current, currentSnapshot());
+    if (!move) return;
+    past.current = move.past;
+    future.current = move.future;
+    applySnapshot(move.snapshot);
+  }, [applySnapshot, currentSnapshot]);
+
+  const doRedo = useCallback(() => {
+    const move = redoStep(past.current, future.current, currentSnapshot());
+    if (!move) return;
+    past.current = move.past;
+    future.current = move.future;
+    applySnapshot(move.snapshot);
+  }, [applySnapshot, currentSnapshot]);
 
   /** 对当前选区套用一个格式标记 */
   function applyMarkup(fn: (text: string, start: number, end: number) => MarkupResult) {
@@ -242,12 +306,12 @@ export default function LongformCards() {
     const original = text;
     setBusy('ai');
 
+    // 记下动手前的历史长度，等 AI 回来把「快速清理 + AI 结果」合成一步撤销
+    const mark = past.current.length;
+
     // 先用规则清理出一版，点下去立刻能看到卡片变化，不用盯着转圈等
     const quick = clean(original);
-    if (quick.trim() && quick.trim() !== original.trim()) {
-      setUndo(original);
-      updateText(quick);
-    }
+    if (quick.trim() && quick.trim() !== original.trim()) updateText(quick);
     setNotice({ tone: 'info', text: '已先做了一遍快速清理，AI 正在重新分段和提炼小标题。' });
 
     try {
@@ -259,18 +323,23 @@ export default function LongformCards() {
       const data = await res.json();
       if (!res.ok) {
         updateText(original); // 失败就回到原文，不留下半成品
-        setUndo(null);
+        past.current = truncate(past.current, mark);
+        syncHistoryFlags();
         setNotice(null);
         say(data?.retryAfter ? `${data.error}（${data.retryAfter} 秒后可再试）` : (data?.error ?? '排版失败了'));
         return;
       }
-      replaceText(toEditorText(data), original);
+      updateText(toEditorText(data));
+      // 快速清理和 AI 结果合成一步：撤销一次就回到原文
+      past.current = pushSnapshot(truncate(past.current, mark), snapshot(original));
+      syncHistoryFlags();
       if (isDensity(data.density)) setDensityChoice(data.density);
       setNotice(data.warning ? { tone: 'warn', text: data.warning } : null);
       say('已排版，可以继续手改');
     } catch {
       updateText(original);
-      setUndo(null);
+      past.current = truncate(past.current, mark);
+      syncHistoryFlags();
       setNotice(null);
       say('网络不太稳，请再试一次');
     } finally {
@@ -285,7 +354,7 @@ export default function LongformCards() {
       say('已经很整齐了，没有需要清理的地方');
       return;
     }
-    replaceText(next, text);
+    updateText(next);
     setNotice(null);
     say('已清理，可以继续点「AI 排版」');
   }
@@ -346,7 +415,7 @@ export default function LongformCards() {
                     type="button"
                     disabled={!text}
                     onClick={() => {
-                      replaceText('', text);
+                      updateText('');
                       setNotice(null);
                     }}
                   >
@@ -374,19 +443,11 @@ export default function LongformCards() {
                 <button className="btn" type="button" onClick={runClean} disabled={!text.trim() || busy !== null}>
                   快速清理
                 </button>
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={undo === null}
-                  onClick={() => {
-                    if (undo === null) return;
-                    updateText(undo);
-                    setUndo(null);
-                    setNotice(null);
-                    say('已回到修改前');
-                  }}
-                >
+                <button className="btn" type="button" disabled={!canUndo} onClick={doUndo}>
                   撤销
+                </button>
+                <button className="btn" type="button" disabled={!canRedo} onClick={doRedo}>
+                  重做
                 </button>
               </div>
 
@@ -442,7 +503,19 @@ export default function LongformCards() {
                   '不用懂格式：粘好之后，把光标放到想当标题的那一行，点上面的「设为大标题」就行。\n\n' +
                   '或者直接点「AI 排版」，让 AI 帮你分好段、起好标题。'
                 }
-                onChange={(e) => updateText(e.target.value)}
+                onChange={(e) => updateText(e.target.value, 'typing')}
+                onKeyDown={(e) => {
+                  if (!(e.metaKey || e.ctrlKey)) return;
+                  const key = e.key.toLowerCase();
+                  if (key === 'z') {
+                    e.preventDefault();
+                    if (e.shiftKey) doRedo();
+                    else doUndo();
+                  } else if (key === 'y') {
+                    e.preventDefault();
+                    doRedo();
+                  }
+                }}
               />
 
               <details className={styles.syntaxBox}>
