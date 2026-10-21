@@ -86,8 +86,21 @@ async function callOnce(cfg: AiConfig, prompt: Prompt, extras: boolean): Promise
   }
 }
 
+export interface ChatUsage {
+  promptTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+}
+
+export interface ChatResult {
+  data: unknown;
+  usage: ChatUsage;
+}
+
+const NO_USAGE: ChatUsage = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
+
 /** 调一次模型并解析出 JSON；对方不支持 json mode 时自动去掉该参数重试 */
-export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<unknown> {
+export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<ChatResult> {
   let res: Response;
   try {
     res = await callOnce(cfg, prompt, true);
@@ -119,12 +132,28 @@ export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<unknown> 
 
   const data = (await res.json().catch(() => null)) as {
     choices?: { message?: { content?: string } }[];
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      prompt_cache_hit_tokens?: number;
+      prompt_tokens_details?: { cached_tokens?: number };
+    };
   } | null;
+
+  const u = data?.usage;
+  const usage: ChatUsage = u
+    ? {
+        promptTokens: u.prompt_tokens ?? 0,
+        cachedTokens: u.prompt_cache_hit_tokens ?? u.prompt_tokens_details?.cached_tokens ?? 0,
+        completionTokens: u.completion_tokens ?? 0,
+      }
+    : NO_USAGE;
+
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new AiError('上游返回内容为空', 'AI 没有返回内容，请重试一次');
   const parsed = extractJson(content);
   if (parsed === null) {
     console.error('[ai] 无法从回复中解析出 JSON，开头 160 字:', content.slice(0, 160));
   }
-  return parsed;
+  return { data: parsed, usage };
 }
