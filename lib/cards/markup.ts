@@ -20,7 +20,7 @@ function lineRange(text: string, start: number, end: number): [number, number] {
   return [from, found === -1 ? text.length : found];
 }
 
-const HEADING_PREFIX = /^#{1,2}[ \t]+/;
+const HEADING_PREFIX = /^#{1,2}[^\S\n]+/;
 
 /**
  * 把选中的行设成大标题 / 小标题；已经是这一级时再点一次就去掉。
@@ -35,7 +35,7 @@ export function toggleHeading(
   const [from, to] = lineRange(text, start, end);
   const marker = '#'.repeat(level);
   const lines = text.slice(from, to).split('\n');
-  const already = new RegExp(`^${marker}[ \\t]+`);
+  const already = new RegExp(`^${marker}[^\\S\\n]+`);
   const filled = lines.filter((l) => l.trim());
   const allSame = filled.length > 0 && filled.every((l) => already.test(l));
 

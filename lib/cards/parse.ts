@@ -13,11 +13,17 @@ export interface Block {
  * 井号后面必须跟空格才算标题（和标准 Markdown 一致）。
  * 这样小红书的话题标签「#养生赛道 #大健康」才不会被当成大标题。
  */
-const HEADING = /^(#{1,2})[ \t]+(\S.*)$/;
+/**
+ * 井号后面允许任何横向空白（普通空格、制表符、不换行空格、全角空格）。
+ * 正文部分用 [\s\S] 而不是 `.`——`.` 匹配不到 U+2028 / U+2029，
+ * 行里夹一个就整条匹配失败，标题会退化成带 # 的正文。
+ */
+const HEADING = /^(#{1,2})[^\S\n]+(\S[\s\S]*)$/;
+const LINE_BREAK = /\r\n?|[\n\u2028\u2029\u0085]/;
 
 export function parse(src: string): Block[] {
   const blocks: Block[] = [];
-  for (const raw of src.split('\n')) {
+  for (const raw of src.split(LINE_BREAK)) {
     const line = raw.trim();
     if (!line) continue;
     const m = line.match(HEADING);

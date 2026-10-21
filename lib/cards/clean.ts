@@ -3,7 +3,12 @@
  * 既给「快速清理」按钮用，也作为 AI 排版的服务端预处理。
  */
 
-const INVISIBLE = /[​-‍⁠﻿­]/g;
+/** 零宽字符、BOM、软连字符：看不见但会影响匹配 */
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
+/** 各种换行：\r\n、\r、行分隔符 U+2028、段分隔符 U+2029、NEL U+0085 */
+const LINE_SEPARATORS = /\r\n?|[\u2028\u2029\u0085]/g;
+/** 不换行空格、全角空格之类，看着是空格但不是 U+0020 */
+const EXOTIC_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const CJK = '\\u4e00-\\u9fff\\u3400-\\u4dbf\\u3000-\\u303f\\uff01-\\uff60';
 const CJK_RE = new RegExp(`[${CJK}]`);
 
@@ -18,8 +23,21 @@ const LATIN_SENTENCE_END = /[.!?]["')\]]*$/;
 const HEADING_RE =
   /^(#{1,2}\s|第[一二三四五六七八九十百零]+[、，,.．:：]?\s*[^\s]|[一二三四五六七八九十]+[、．.]\s*|\d+[、．.)）]\s*|【[^】]{1,20}】)/;
 
+/**
+ * 编辑器入口的规范化：只动会破坏结构的字符。
+ *
+ * 从小红书、公众号复制来的文字里常夹着 U+2028 / U+2029 这种「看不见的换行」。
+ * 它们在 textarea 里显示成换行，但 split('\n') 切不开，正则里的 `.` 也匹配不到，
+ * 结果就是「设为大标题」之后 `#` 被当成正文原样显示出来。
+ * 这里不动空格，免得把中文输入法打出的全角空格也一并改掉。
+ */
+export function normalizeInput(text: string): string {
+  return text.replace(LINE_SEPARATORS, '\n').replace(INVISIBLE, '');
+}
+
+/** 快速清理内部用：在入口规范化之外，把各种异常空格也统一成普通空格 */
 export function stripInvisible(text: string): string {
-  return text.replace(/\r\n?/g, '\n').replace(INVISIBLE, '');
+  return normalizeInput(text).replace(EXOTIC_SPACES, ' ');
 }
 
 export function isHeadingLike(line: string): boolean {

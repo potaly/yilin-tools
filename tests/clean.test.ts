@@ -12,7 +12,7 @@ import {
 
 describe('stripInvisible', () => {
   it('去掉零宽字符与 \\r', () => {
-    expect(stripInvisible('你​好\r\n世界')).toBe('你好\n世界');
+    expect(stripInvisible('你\u200B好\r\n世界')).toBe('你好\n世界');
   });
 });
 

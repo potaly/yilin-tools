@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardFont } from '@/app/fonts';
-import { clean } from '@/lib/cards/clean';
+import { clean, normalizeInput } from '@/lib/cards/clean';
 import { drawCover } from '@/lib/cards/cover';
 import { drawPage, footerHeight } from '@/lib/cards/draw';
 import { savePage, savePdf, saveZip, type PageImage } from '@/lib/cards/export';
@@ -250,7 +250,9 @@ export default function LongformCards() {
    * 'action' 是按钮触发的整体改动，每次都单独记一步。
    */
   const updateText = useCallback(
-    (next: string, mode: 'typing' | 'action' = 'action') => {
+    (raw: string, mode: 'typing' | 'action' = 'action') => {
+      // 粘进来的文字可能带 U+2028 这类看不见的换行，先统一掉再进状态
+      const next = normalizeInput(raw);
       const now = Date.now();
       const shouldRecord = mode === 'action' || now - lastRecord.current >= 700;
       if (shouldRecord) {
