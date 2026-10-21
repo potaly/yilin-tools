@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (!(await verifyLoginCode(email, code))) {
       return NextResponse.json({ error: '验证码不对或已过期' }, { status: 401 });
     }
-    const { user, isNew } = await findOrCreateUser(email);
+    const { user, isNew } = await findOrCreateUser({ provider: 'email', key: email });
     const token = await createSession(user.id);
     const res = NextResponse.json({
       ok: true,

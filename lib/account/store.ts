@@ -11,18 +11,38 @@ import { getRedis, nsKey } from '@/lib/redis';
 import { entry, type LedgerEntry, type LedgerType, type Usage } from './credits';
 import { DEFAULT_SETTINGS, normalizeSettings, type Settings } from './settings';
 
+/** 登录方式。以后再加别的（公众号网页授权、手机号）就往这里加 */
+export type Provider = 'email' | 'wechat';
+
 export interface User {
   id: string;
+  /** 微信注册的账户没有邮箱，这里会是空串 */
   email: string;
   createdAt: string;
   lastLoginAt: string;
   loginCount: number;
+  /** 这个账户绑过哪些登录方式 */
+  providers?: Provider[];
+  /** 微信的唯一标识，优先 unionid */
+  wechatId?: string;
+  nickname?: string;
+  avatar?: string;
+}
+
+export interface Identity {
+  provider: Provider;
+  /** 邮箱登录是邮箱，微信登录是 unionid 或 openid */
+  key: string;
+  email?: string;
+  nickname?: string;
+  avatar?: string;
 }
 
 const K = {
   settings: () => nsKey('settings'),
   user: (id: string) => nsKey(`user:${id}`),
   byEmail: (email: string) => nsKey(`user:email:${email}`),
+  byIdentity: (provider: string, key: string) => nsKey(`user:${provider}:${key}`),
   userIndex: () => nsKey('users'),
   balance: (id: string) => nsKey(`credits:${id}`),
   ledger: (id: string) => nsKey(`ledger:${id}`),
@@ -76,13 +96,18 @@ export async function getUser(id: string): Promise<User | null> {
   return (await r.get<User>(K.user(id))) ?? null;
 }
 
-export async function findOrCreateUser(
-  rawEmail: string,
-): Promise<{ user: User; isNew: boolean }> {
-  const email = normalizeEmail(rawEmail);
+/**
+ * 按登录身份找账户，没有就建一个并发赠送算力。
+ * 邮箱和微信是两条独立的身份索引，同一个人用两种方式登录会是两个账户，
+ * 以后要合并再做绑定流程。
+ */
+export async function findOrCreateUser(identity: Identity): Promise<{ user: User; isNew: boolean }> {
   const r = redis();
-  const existingId = await r.get<string>(K.byEmail(email));
+  const key = identity.provider === 'email' ? normalizeEmail(identity.key) : identity.key;
+  const indexKey =
+    identity.provider === 'email' ? K.byEmail(key) : K.byIdentity(identity.provider, key);
 
+  const existingId = await r.get<string>(indexKey);
   if (existingId) {
     const user = await getUser(existingId);
     if (user) {
@@ -90,6 +115,8 @@ export async function findOrCreateUser(
         ...user,
         lastLoginAt: new Date().toISOString(),
         loginCount: (user.loginCount ?? 0) + 1,
+        ...(identity.nickname ? { nickname: identity.nickname } : {}),
+        ...(identity.avatar ? { avatar: identity.avatar } : {}),
       };
       await r.set(K.user(user.id), updated);
       return { user: updated, isNew: false };
@@ -99,13 +126,17 @@ export async function findOrCreateUser(
   const now = new Date().toISOString();
   const user: User = {
     id: randomBytes(9).toString('base64url'),
-    email,
+    email: identity.provider === 'email' ? key : (identity.email ?? ''),
     createdAt: now,
     lastLoginAt: now,
     loginCount: 1,
+    providers: [identity.provider],
+    ...(identity.provider === 'wechat' ? { wechatId: key } : {}),
+    ...(identity.nickname ? { nickname: identity.nickname } : {}),
+    ...(identity.avatar ? { avatar: identity.avatar } : {}),
   };
   await r.set(K.user(user.id), user);
-  await r.set(K.byEmail(email), user.id);
+  await r.set(indexKey, user.id);
   await r.sadd(K.userIndex(), user.id);
 
   const settings = await getSettings();
@@ -113,6 +144,20 @@ export async function findOrCreateUser(
     await addCredits(user.id, settings.signupGrant, 'grant', '注册赠送');
   }
   return { user, isNew: true };
+}
+
+/** 登录流程里用来防 CSRF 的一次性 state */
+export async function saveOauthState(state: string, next: string): Promise<void> {
+  await redis().set(nsKey(`oauth:${state}`), next, { ex: 600 });
+}
+
+export async function takeOauthState(state: string): Promise<string | null> {
+  const r = getRedis();
+  if (!r) return null;
+  const key = nsKey(`oauth:${state}`);
+  const next = await r.get<string>(key);
+  if (next !== null && next !== undefined) await r.del(key);
+  return next ?? null;
 }
 
 export async function listUsers(limit = 200): Promise<(User & { balance: number })[]> {
