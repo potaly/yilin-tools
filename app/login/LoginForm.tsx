@@ -14,6 +14,7 @@ interface Me {
   balance?: number;
   admin?: boolean;
   wechat?: boolean;
+  emailLogin?: boolean;
 }
 
 /** 微信回调带回来的结果说明 */
@@ -174,6 +175,21 @@ export default function LoginForm() {
     );
   }
 
+  // 一种登录方式都没配时，老老实实说还没开放，别给一个按了就报错的表单
+  if (me && !me.wechat && !me.emailLogin) {
+    return (
+      <div className={styles.card}>
+        <h1 className={styles.title}>登录还没开放</h1>
+        <p className={styles.lede}>
+          现在所有功能都不用登录就能用：排版、换模板、保存图片、导出 PDF，AI 排版也是免费的。
+        </p>
+        <a className="btn btnPrimary" href="/tools/longform-cards" style={{ width: '100%', minHeight: 46 }}>
+          去做图卡
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.card}>
       <h1 className={styles.title}>登录{SITE.name}</h1>
@@ -188,12 +204,15 @@ export default function LoginForm() {
             <WechatIcon />
             微信扫码登录
           </a>
-          <div className={styles.divider}>
-            <span>或用邮箱登录</span>
-          </div>
+          {me.emailLogin && (
+            <div className={styles.divider}>
+              <span>或用邮箱登录</span>
+            </div>
+          )}
         </>
       )}
 
+      {me?.emailLogin && (
       <div className={styles.field}>
         <label htmlFor="email">邮箱</label>
         <input
@@ -209,6 +228,7 @@ export default function LoginForm() {
           onKeyDown={(e) => e.key === 'Enter' && sendCode()}
         />
       </div>
+      )}
 
       {step === 'code' && (
         <div className={styles.field}>
@@ -236,7 +256,7 @@ export default function LoginForm() {
         </p>
       )}
 
-      {step === 'email' ? (
+      {!me?.emailLogin ? null : step === 'email' ? (
         <button
           className="btn btnPrimary"
           type="button"
