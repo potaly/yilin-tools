@@ -1,7 +1,14 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { checkAdmin } from '@/lib/account/admin';
-import { getDailyStats, getSettings, getUserStats, listUsers, type StatsRow } from '@/lib/account/store';
+import {
+  getDailyStats,
+  getIpStats,
+  getSettings,
+  getUserStats,
+  listUsers,
+  type StatsRow,
+} from '@/lib/account/store';
 import styles from './admin.module.css';
 import { GrantForm, SettingsForm } from './AdminForms';
 
@@ -50,7 +57,12 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, daily, users] = await Promise.all([getSettings(), getDailyStats(14), listUsers()]);
+  const [settings, daily, users, ipRows] = await Promise.all([
+    getSettings(),
+    getDailyStats(14),
+    listUsers(),
+    getIpStats(14),
+  ]);
   const perUser = await Promise.all(users.map((u) => getUserStats(u.id)));
   const rows = daily.map((d) => d.stats);
   // Redis 不可用时 daily 是空的，不能直接取 rows[0]
@@ -143,6 +155,42 @@ export default async function AdminPage({
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section className={styles.panel}>
+          <span className={styles.panelTitle}>按 IP（近 14 天，{ipRows.length} 条）</span>
+          {ipRows.length === 0 ? (
+            <p className={styles.empty}>还没有记录。有人用过 AI 排版之后，这里会按天列出每个 IP 的用量。</p>
+          ) : (
+            <div className={styles.scroll}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>IP</th>
+                    <th className={styles.num}>排版次数</th>
+                    <th className={styles.num}>字数</th>
+                    <th className={styles.num}>输入 token</th>
+                    <th className={styles.num}>输出 token</th>
+                    <th className={styles.num}>成本</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ipRows.map((r) => (
+                    <tr key={`${r.day}-${r.ip}`}>
+                      <td>{r.day}</td>
+                      <td>{r.ip}</td>
+                      <td className={styles.num}>{r.stats.calls}</td>
+                      <td className={styles.num}>{r.stats.chars.toLocaleString()}</td>
+                      <td className={styles.num}>{r.stats.promptTokens.toLocaleString()}</td>
+                      <td className={styles.num}>{r.stats.completionTokens.toLocaleString()}</td>
+                      <td className={styles.num}>{yuan(r.stats.costFen)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className={styles.panel}>

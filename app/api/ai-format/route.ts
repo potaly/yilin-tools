@@ -123,13 +123,17 @@ export async function POST(req: NextRequest) {
     const output = merged.title + merged.blocks.map((b) => b.text).join('');
     const rate = coverage(cleaned, output);
 
-    await recordUsage(account?.user.id ?? null, {
-      ...usage,
-      chunks: chunks.length,
-      chars: text.length,
-      costCny: costCny(usage),
-      credits: settings.billingEnabled ? credits : 0,
-    });
+    await recordUsage(
+      account?.user.id ?? null,
+      {
+        ...usage,
+        chunks: chunks.length,
+        chars: text.length,
+        costCny: costCny(usage),
+        credits: settings.billingEnabled ? credits : 0,
+      },
+      id, // 没有登录时，IP 是唯一能区分用户的东西
+    );
 
     console.log(
       `[ai-format] 完成 块数=${chunks.length} 字数=${text.length} 覆盖率=${rate.toFixed(3)}` +

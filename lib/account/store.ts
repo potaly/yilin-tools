@@ -50,6 +50,8 @@ const K = {
   loginCode: (email: string) => nsKey(`logincode:${email}`),
   statsDay: (day: string) => nsKey(`stats:day:${day}`),
   statsUser: (id: string) => nsKey(`stats:user:${id}`),
+  /** 一天一个 hash，字段是「IP|指标」，一次 hgetall 就能拿到当天所有 IP */
+  statsIpDay: (day: string) => nsKey(`stats:ipday:${day}`),
 };
 
 const SESSION_TTL = 60 * 60 * 24 * 30; // 30 天
@@ -236,9 +238,18 @@ export interface UsageRecord extends Usage {
   credits: number;
 }
 
-export async function recordUsage(userId: string | null, u: UsageRecord): Promise<void> {
+/** IP 和指标名之间的分隔符。IPv6 本身带冒号，所以不能用冒号 */
+const IP_FIELD_SEP = '|';
+const IP_STATS_DAYS = 45;
+
+export async function recordUsage(
+  userId: string | null,
+  u: UsageRecord,
+  ip?: string,
+): Promise<void> {
   const r = getRedis();
   if (!r) return;
+  const day = today();
   const fields: [string, number][] = [
     ['calls', 1],
     ['chunks', u.chunks],
@@ -250,10 +261,12 @@ export async function recordUsage(userId: string | null, u: UsageRecord): Promis
   ];
   try {
     await Promise.all([
-      ...fields.map(([f, v]) => r.hincrby(K.statsDay(today()), f, v)),
+      ...fields.map(([f, v]) => r.hincrby(K.statsDay(day), f, v)),
       ...(userId ? fields.map(([f, v]) => r.hincrby(K.statsUser(userId), f, v)) : []),
+      ...(ip ? fields.map(([f, v]) => r.hincrby(K.statsIpDay(day), `${ip}${IP_FIELD_SEP}${f}`, v)) : []),
     ]);
-    await r.expire(K.statsDay(today()), 60 * 60 * 24 * 400);
+    await r.expire(K.statsDay(day), 60 * 60 * 24 * 400);
+    if (ip) await r.expire(K.statsIpDay(day), 60 * 60 * 24 * IP_STATS_DAYS);
   } catch (e) {
     console.error('[stats] 写用量失败:', (e as Error).message);
   }
@@ -291,6 +304,49 @@ export async function getDailyStats(days = 14): Promise<{ day: string; stats: St
     list.push({ day: d, stats: toStats(await r.hgetall(K.statsDay(d))) });
   }
   return list;
+}
+
+export interface IpRow {
+  day: string;
+  ip: string;
+  stats: StatsRow;
+}
+
+/** 把一天的扁平 hash（字段形如 "1.2.3.4|calls"）还原成一行一个 IP */
+export function parseIpDay(day: string, raw: Record<string, unknown> | null): IpRow[] {
+  if (!raw) return [];
+  const byIp = new Map<string, StatsRow>();
+  for (const [field, value] of Object.entries(raw)) {
+    const at = field.lastIndexOf(IP_FIELD_SEP);
+    if (at <= 0) continue;
+    const ip = field.slice(0, at);
+    const metric = field.slice(at + 1) as keyof StatsRow;
+    if (!(metric in EMPTY_STATS)) continue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) continue;
+    const row = byIp.get(ip) ?? { ...EMPTY_STATS };
+    row[metric] = n;
+    byIp.set(ip, row);
+  }
+  return [...byIp.entries()]
+    .map(([ip, stats]) => ({ day, ip, stats }))
+    .sort((a, b) => b.stats.calls - a.stats.calls);
+}
+
+/** 近 days 天里每个 IP 每天的用量，按日期倒序、当天按次数多的在前 */
+export async function getIpStats(days = 14, limit = 300): Promise<IpRow[]> {
+  const r = getRedis();
+  if (!r) return [];
+  const out: IpRow[] = [];
+  for (let i = 0; i < days && out.length < limit; i++) {
+    const d = new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10);
+    try {
+      out.push(...parseIpDay(d, await r.hgetall(K.statsIpDay(d))));
+    } catch (e) {
+      console.error('[stats] 读 IP 用量失败:', (e as Error).message);
+    }
+  }
+  return out.slice(0, limit);
 }
 
 export async function getUserStats(id: string): Promise<StatsRow> {
