@@ -11,6 +11,8 @@ export interface CoverOptions {
   height: number;
   title: string;
   subtitle: string;
+  /** 字数与阅读时长，只有需要顶部信息条的模板会用 */
+  info?: { words: number; minutes: number };
   template: Template;
   footer: FooterOptions;
   fontFamily: string;
@@ -39,6 +41,31 @@ export function drawCover(opts: CoverOptions): HTMLCanvasElement {
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
 
+  if (template.marginRule) {
+    ctx.fillStyle = colors.rule;
+    ctx.fillRect(CANVAS.mx - 26, 0, 2, height);
+  }
+
+  // 顶部信息条：字数在左、署名在右，下面一条细线（和正文页同一个样式）
+  let topUsed = 0;
+  if (template.authorAt === 'meta' && (opts.info || footer.author.trim())) {
+    const cy = CANVAS.metaY - 60;
+    ctx.font = fontOf(500, 32, fontFamily);
+    ctx.fillStyle = colors.meta;
+    if (opts.info) {
+      ctx.fillText(`全文${opts.info.words}字 ｜ 阅读需要${opts.info.minutes}分钟`, CANVAS.mx, cy);
+    }
+    const author = footer.author.trim();
+    if (author) {
+      ctx.textAlign = 'right';
+      ctx.fillText(author, CANVAS.w - CANVAS.mx, cy);
+      ctx.textAlign = 'left';
+    }
+    ctx.fillStyle = colors.rule;
+    ctx.fillRect(CANVAS.mx, cy + 36, CANVAS.w - 2 * CANVAS.mx, 2);
+    topUsed = cy + 36;
+  }
+
   // 选一个能放下的字号
   let fs = TITLE_SIZES[TITLE_SIZES.length - 1];
   let lines = [] as ReturnType<typeof breakLines>;
@@ -60,6 +87,7 @@ export function drawCover(opts: CoverOptions): HTMLCanvasElement {
   const lh = Math.round(fs * 1.34);
   const blockH = lines.length * lh;
   let y = Math.round((height - blockH) / 2 - height * 0.04);
+  if (topUsed) y = Math.max(y, topUsed + 96);
 
   // 标题上方一道短线，给封面一个视觉起点
   ctx.fillStyle = ink;
@@ -94,7 +122,8 @@ export function drawCover(opts: CoverOptions): HTMLCanvasElement {
     }
   }
 
-  const author = footer.author.trim();
+  // 署名已经放到顶部的模板，底部就不再重复一次
+  const author = template.authorAt === 'meta' ? '' : footer.author.trim();
   if (author) {
     ctx.font = fontOf(500, 30, fontFamily);
     ctx.fillStyle = withAlpha(ink, 0.6);

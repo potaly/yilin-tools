@@ -3,7 +3,13 @@ import { parse } from '@/lib/cards/parse';
 import { dropEmptyPages, paginate } from '@/lib/cards/paginate';
 import { SAMPLE } from '@/lib/cards/sample';
 import { RATIO_HEIGHT, metricsFor } from '@/lib/cards/spec';
-import { DEFAULT_TEMPLATE, TEMPLATES, templateById, titleFamily } from '@/lib/cards/templates';
+import {
+  DEFAULT_TEMPLATE,
+  TEMPLATES,
+  bodyFamily,
+  templateById,
+  titleFamily,
+} from '@/lib/cards/templates';
 import { FONT, fakeMeasurer } from './helpers';
 
 /** WCAG 相对亮度 */
@@ -41,9 +47,17 @@ describe('模板', () => {
     expect(templateById('morandi').name).toBe('莫兰迪');
   });
 
-  it('只有衬线模板换标题字体', () => {
+  it('标题字体按模板配置来', () => {
     expect(titleFamily(templateById('warm'), FONT)).toBe(FONT);
     expect(titleFamily(templateById('ink'), FONT)).toContain('serif');
+  });
+
+  it('正文字体按模板配置来，粉笺是宋体正文配黑体标题', () => {
+    expect(bodyFamily(templateById('warm'), FONT)).toBe(FONT);
+    expect(bodyFamily(templateById('note'), FONT)).toContain('serif');
+    // 和宣纸墨正好反过来
+    expect(titleFamily(templateById('note'), FONT)).toBe(FONT);
+    expect(bodyFamily(templateById('ink'), FONT)).toBe(FONT);
   });
 
   it('换模板不改变分页结果', () => {
@@ -76,13 +90,21 @@ describe('模板', () => {
     expect(pages(64)).toBeGreaterThanOrEqual(pages(0));
   });
 
-  // 卡片是拿来读的，深底模板尤其容易做得好看但看不清，这条守住底线
-  it.each(TEMPLATES.map((t) => [t.name, t] as const))('%s 的正文和标题对比度达标', (_name, t) => {
+  /*
+   * 卡片是拿来读的，深底和高饱和配色尤其容易做得好看但看不清。
+   * 按 WCAG 分两档：大标题和小标题是大字，3:1 即可；
+   * 正文和夹在正文里的加粗是小字（1080 宽的卡片缩到手机上只有十几像素），要 4.5:1。
+   */
+  it.each(TEMPLATES.map((t) => [t.name, t] as const))('%s 的正文对比度达到 4.5:1', (_name, t) => {
     expect(contrast(t.colors.body, t.colors.bg)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t.colors.title, t.colors.bg)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t.colors.bold, t.colors.bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(TEMPLATES.map((t) => [t.name, t] as const))('%s 的标题对比度达到 3:1', (_name, t) => {
+    expect(contrast(t.colors.title, t.colors.bg)).toBeGreaterThanOrEqual(3);
+    expect(contrast(t.colors.h2, t.colors.bg)).toBeGreaterThanOrEqual(3);
     const coverBg = t.colors.coverBg ?? t.colors.bg;
     const coverInk = t.colors.coverInk ?? t.colors.title;
-    expect(contrast(coverInk, coverBg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(coverInk, coverBg)).toBeGreaterThanOrEqual(3);
   });
 });

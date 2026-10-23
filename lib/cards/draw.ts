@@ -26,8 +26,9 @@ export interface DrawOptions {
 /** 页脚占用的高度，开启时要从版心里扣掉 */
 export const FOOTER_H = 64;
 
-export function footerHeight(footer: FooterOptions): number {
-  return footer.pageNumber || footer.author.trim() ? FOOTER_H : 0;
+export function footerHeight(footer: FooterOptions, template?: Template): number {
+  const authorInFooter = template?.authorAt !== 'meta' && Boolean(footer.author.trim());
+  return footer.pageNumber || authorInFooter ? FOOTER_H : 0;
 }
 
 function colorOf(kind: BlockKind, bold: boolean, t: Template): string {
@@ -47,6 +48,13 @@ export function drawPage(ops: PageOp[], opts: DrawOptions): HTMLCanvasElement {
   const maxW = CANVAS.w - 2 * CANVAS.mx;
   ctx.fillStyle = template.colors.bg;
   ctx.fillRect(0, 0, CANVAS.w, height);
+
+  // 笔记本那种页边竖线
+  if (template.marginRule) {
+    ctx.fillStyle = template.colors.rule;
+    ctx.fillRect(CANVAS.mx - 26, 0, 2, height);
+  }
+
   ctx.textBaseline = 'middle';
 
   for (const op of ops) {
@@ -56,6 +64,14 @@ export function drawPage(ops: PageOp[], opts: DrawOptions): HTMLCanvasElement {
       ctx.fillStyle = template.colors.meta;
       ctx.textAlign = 'left';
       ctx.fillText(`全文${info.words}字 ｜ 阅读需要${info.minutes}分钟`, CANVAS.mx + 44, op.cy + 1);
+
+      // 署名跟字数信息同一行、靠右（像手账的页眉）
+      const metaAuthor = footer.author.trim();
+      if (template.authorAt === 'meta' && metaAuthor) {
+        ctx.textAlign = 'right';
+        ctx.fillText(metaAuthor, CANVAS.w - CANVAS.mx, op.cy + 1);
+        ctx.textAlign = 'left';
+      }
     } else if (op.type === 'rule') {
       ctx.fillStyle = template.colors.rule;
       ctx.fillRect(CANVAS.mx, op.y, maxW, 3);
@@ -101,7 +117,8 @@ export function drawPage(ops: PageOp[], opts: DrawOptions): HTMLCanvasElement {
 
 function drawFooter(ctx: CanvasRenderingContext2D, opts: DrawOptions, height: number) {
   const { footer, template, fontFamily, pageNumber, pageCount } = opts;
-  const author = footer.author.trim();
+  // 署名放到顶部时，页脚就只剩页码
+  const author = template.authorAt === 'meta' ? '' : footer.author.trim();
   if (!footer.pageNumber && !author) return;
 
   const y = height - 58;

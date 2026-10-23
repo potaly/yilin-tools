@@ -23,6 +23,7 @@ export interface TemplateColors {
 }
 
 export type TitleDecor = 'highlight' | 'underline' | 'none';
+export type FontKind = 'sans' | 'serif';
 
 export interface Template {
   id: string;
@@ -32,8 +33,14 @@ export interface Template {
   colors: TemplateColors;
   /** 大标题的装饰方式 */
   decor: TitleDecor;
-  /** 标题是否用衬线字体 */
-  serifTitle?: boolean;
+  /** 标题字体，默认黑体 */
+  titleFont?: FontKind;
+  /** 正文字体，默认黑体 */
+  bodyFont?: FontKind;
+  /** 左边留一条竖线，像笔记本的页边 */
+  marginRule?: boolean;
+  /** 署名放哪：默认页脚，meta 表示跟字数信息同一行、靠右 */
+  authorAt?: 'footer' | 'meta';
 }
 
 export const SERIF_FONT =
@@ -81,7 +88,7 @@ export const TEMPLATES: Template[] = [
     name: '黑白杂志',
     desc: '衬线标题，像纸质刊物',
     decor: 'underline',
-    serifTitle: true,
+    titleFont: 'serif',
     colors: {
       bg: '#FBFBF9',
       title: '#141414',
@@ -156,7 +163,7 @@ export const TEMPLATES: Template[] = [
     name: '宣纸墨',
     desc: '米黄纸感，衬线标题，朱砂点缀',
     decor: 'underline',
-    serifTitle: true,
+    titleFont: 'serif',
     colors: {
       bg: '#F5F0E3',
       title: '#1F1C18',
@@ -207,6 +214,29 @@ export const TEMPLATES: Template[] = [
       coverInk: '#24463B',
     },
   },
+  {
+    id: 'note',
+    name: '粉笺',
+    desc: '玫红标题配宋体正文，像小红书的爆款笔记',
+    decor: 'none',
+    bodyFont: 'serif',
+    marginRule: true,
+    authorAt: 'meta',
+    colors: {
+      bg: '#FDF8F8',
+      // 大标题是大字，3:1 就够，所以能用这种鲜亮的玫红
+      title: '#E8365B',
+      h2: '#E8365B',
+      body: '#1A1A1A',
+      // 加粗是夹在正文里的小字，要 4.5:1，所以比标题深一档
+      bold: '#D4284F',
+      meta: '#3A3A3A',
+      bar: '#F8D7DF',
+      rule: '#F0B9C8',
+      coverBg: '#FDF8F8',
+      coverInk: '#E8365B',
+    },
+  },
 ];
 
 export const DEFAULT_TEMPLATE = TEMPLATES[0];
@@ -215,9 +245,14 @@ export function templateById(id: string): Template {
   return TEMPLATES.find((t) => t.id === id) ?? DEFAULT_TEMPLATE;
 }
 
-/** 标题字体族：衬线模板用衬线，其余跟正文一致 */
-export function titleFamily(template: Template, bodyFamily: string): string {
-  return template.serifTitle ? `${SERIF_FONT},${bodyFamily}` : bodyFamily;
+/** 标题字体族 */
+export function titleFamily(template: Template, sansFamily: string): string {
+  return template.titleFont === 'serif' ? `${SERIF_FONT},${sansFamily}` : sansFamily;
+}
+
+/** 正文字体族 */
+export function bodyFamily(template: Template, sansFamily: string): string {
+  return template.bodyFont === 'serif' ? `${SERIF_FONT},${sansFamily}` : sansFamily;
 }
 
 /** 页脚配置，和模板无关，由用户在界面上开关 */

@@ -28,6 +28,7 @@ import { SAMPLE } from '@/lib/cards/sample';
 import {
   DEFAULT_TEMPLATE,
   TEMPLATES,
+  bodyFamily,
   templateById,
   titleFamily,
 } from '@/lib/cards/templates';
@@ -109,6 +110,7 @@ export default function LongformCards() {
     const info = { words: count, minutes: readingMinutes(count) };
     const template = templateById(templateId);
     const titleFont = titleFamily(template, FONT_FAMILY);
+    const bodyFont = bodyFamily(template, FONT_FAMILY);
     const footer = { pageNumber: showPageNumber, author };
 
     // 开了封面页就把大标题抽出来单独成页，正文从第二页开始
@@ -122,9 +124,9 @@ export default function LongformCards() {
             showMeta,
             metrics,
             measure,
-            fontFamily: FONT_FAMILY,
+            fontFamily: bodyFont,
             titleFontFamily: titleFont,
-            footerH: footerHeight(footer),
+            footerH: footerHeight(footer, template),
           }),
         )
       : [];
@@ -137,9 +139,10 @@ export default function LongformCards() {
           height,
           title: titleBlock.text,
           subtitle: subtitleOf(flow),
+          info,
           template,
           footer,
-          fontFamily: FONT_FAMILY,
+          fontFamily: bodyFont,
           titleFontFamily: titleFont,
           measure,
         }),
@@ -151,7 +154,7 @@ export default function LongformCards() {
           height,
           info,
           metrics,
-          fontFamily: FONT_FAMILY,
+          fontFamily: bodyFont,
           titleFontFamily: titleFont,
           template,
           footer,
