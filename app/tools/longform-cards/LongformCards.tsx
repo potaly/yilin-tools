@@ -42,10 +42,12 @@ import {
   type Density,
   type Ratio,
 } from '@/lib/cards/spec';
+import { track } from '@/lib/analytics/visitor';
 import styles from './longform.module.css';
 
 const DRAFT_KEY = 'yilin:longform-cards:draft';
 const FONT_FAMILY = cardFont.style.fontFamily;
+const TOOL = 'longform-cards';
 
 type DensityChoice = 'auto' | Density;
 type Busy = null | 'ai' | 'zip' | 'pdf';
@@ -188,6 +190,10 @@ export default function LongformCards() {
     setPages(next);
   }, [text, ratio, densityChoice, showMeta, templateId, useCover, showPageNumber, author]);
 
+  useEffect(() => {
+    track('open', TOOL);
+  }, []);
+
   // 输入防抖 300ms
   useEffect(() => {
     const timer = setTimeout(render, 300);
@@ -318,6 +324,7 @@ export default function LongformCards() {
   async function runAi() {
     if (!text.trim() || busy) return;
     const original = text;
+    track('run', TOOL);
     setBusy('ai');
 
     // 记下动手前的历史长度，等 AI 回来把「快速清理 + AI 结果」合成一步撤销
@@ -344,6 +351,7 @@ export default function LongformCards() {
         return;
       }
       updateText(toEditorText(data));
+      track('done', TOOL);
       // 快速清理和 AI 结果合成一步：撤销一次就回到原文
       past.current = pushSnapshot(truncate(past.current, mark), snapshot(original));
       syncHistoryFlags();
@@ -385,6 +393,7 @@ export default function LongformCards() {
           : await savePdf(images, { width: 1080, height: RATIO_HEIGHT[ratio] }, `${slug}.pdf`);
       if (result === 'downloaded') say(kind === 'zip' ? '图片已打包下载' : 'PDF 已下载');
       else if (result === 'shared') say(kind === 'zip' ? '选「存储图像」就进相册了' : '已发送');
+      track('take', TOOL);
     } catch {
       say('导出失败了，请重试');
     } finally {
@@ -742,6 +751,7 @@ export default function LongformCards() {
                         type="button"
                         onClick={async () => {
                           const r = await savePage(page.image);
+                          track('take', TOOL);
                           if (r === 'downloaded') say('已保存这一页');
                         }}
                       >

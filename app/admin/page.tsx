@@ -9,6 +9,9 @@ import {
   listUsers,
   type StatsRow,
 } from '@/lib/account/store';
+import { EVENT_LABEL, EVENTS } from '@/lib/analytics/events';
+import { getDailyVisitors, getEventStats, getRetention } from '@/lib/analytics/store';
+import { TOOLS } from '@/lib/site';
 import styles from './admin.module.css';
 import { GrantForm, SettingsForm } from './AdminForms';
 
@@ -57,12 +60,23 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, daily, users, ipRows] = await Promise.all([
+  const [settings, daily, users, ipRows, events, visitors, retention] = await Promise.all([
     getSettings(),
     getDailyStats(14),
     listUsers(),
     getIpStats(14),
+    getEventStats(14),
+    getDailyVisitors(14),
+    getRetention(),
   ]);
+  const visitorsByDay = new Map(visitors.map((v) => [v.day, v.count]));
+  const eventTotals = events.reduce(
+    (acc, d) => {
+      for (const e of EVENTS) acc[e] += d.total[e];
+      return acc;
+    },
+    { open: 0, run: 0, done: 0, take: 0 },
+  );
   const perUser = await Promise.all(users.map((u) => getUserStats(u.id)));
   const rows = daily.map((d) => d.stats);
   // Redis 不可用时 daily 是空的，不能直接取 rows[0]
@@ -124,7 +138,88 @@ export default async function AdminPage({
         )}
 
         <section className={styles.panel}>
-          <span className={styles.panelTitle}>近 14 天</span>
+          <span className={styles.panelTitle}>匿名访客与漏斗（近 14 天）</span>
+          <div className={styles.cards}>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>今日访客</div>
+              <div className={styles.cardValue}>{visitors[0]?.count ?? 0}</div>
+              <div className={styles.cardNote}>
+                近 14 天去重前共 {visitors.reduce((n, v) => n + v.count, 0)} 人次
+              </div>
+            </div>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>次周留存</div>
+              <div className={styles.cardValue}>
+                {retention.rate === null ? '—' : `${Math.round(retention.rate * 100)}%`}
+              </div>
+              <div className={styles.cardNote}>
+                上个 7 天来过 {retention.lastWeek} 人，回来 {retention.returned} 人
+              </div>
+            </div>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>完成率</div>
+              <div className={styles.cardValue}>
+                {eventTotals.open ? `${Math.round((eventTotals.done / eventTotals.open) * 100)}%` : '—'}
+              </div>
+              <div className={styles.cardNote}>
+                打开 {eventTotals.open} → 用上 {eventTotals.done}
+              </div>
+            </div>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>拿走结果</div>
+              <div className={styles.cardValue}>{eventTotals.take}</div>
+              <div className={styles.cardNote}>复制报告 / 保存图片</div>
+            </div>
+          </div>
+
+          <p className={styles.empty} style={{ marginTop: 10 }}>
+            匿名 id 存在浏览器里，清缓存或换设备会冲掉，所以留存是<strong>偏低</strong>的真实下界。
+            事件体里只有 id、事件名、工具名，没有任何正文。
+          </p>
+
+          <div className={styles.scroll}>
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th className={styles.num}>访客</th>
+                  <th>工具</th>
+                  {EVENTS.map((e) => (
+                    <th key={e} className={styles.num}>
+                      {EVENT_LABEL[e]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {events.flatMap((d) =>
+                  TOOLS.map((t, i) => {
+                    const f = d.byTool[t.slug];
+                    if (!f) return null;
+                    return (
+                      <tr key={`${d.day}-${t.slug}`}>
+                        <td>{i === 0 ? d.day : ''}</td>
+                        <td className={styles.num}>{i === 0 ? (visitorsByDay.get(d.day) ?? 0) : ''}</td>
+                        <td>{t.name}</td>
+                        {EVENTS.map((e) => (
+                          <td key={e} className={styles.num}>
+                            {f[e]}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  }).filter(Boolean),
+                )}
+              </tbody>
+            </table>
+          </div>
+          {eventTotals.open === 0 && (
+            <p className={styles.empty}>还没有埋点数据。有人打开工具之后，这里就会有行。</p>
+          )}
+        </section>
+
+        <section className={styles.panel}>
+          <span className={styles.panelTitle}>AI 排版用量（近 14 天）</span>
           <div className={styles.scroll}>
             <table>
               <thead>

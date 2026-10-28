@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { track } from '@/lib/analytics/visitor';
 import { analyze } from '@/lib/aiwei/engine';
 import { dedupe } from '@/lib/aiwei/match';
 import { toPlainText } from '@/lib/aiwei/report';
@@ -12,6 +13,10 @@ import styles from './ai-flavor.module.css';
 
 /** 纯客户端计算，没有请求要省，300ms 只是为了不在每次按键时重排界面 */
 const DEBOUNCE_MS = 300;
+
+const TOOL = 'ai-flavor';
+/** 短于这个字数不算一次真的检测，免得手滑敲两个字就污染漏斗 */
+const MEANINGFUL_CHARS = 50;
 
 export default function AiFlavor() {
   const [text, setText] = useState('');
@@ -39,8 +44,21 @@ export default function AiFlavor() {
 
   const empty = debounced.trim().length === 0;
 
+  useEffect(() => {
+    track('open', TOOL);
+  }, []);
+
+  // 这个工具没有「开始检测」按钮，所以 run = 第一次真的粘了东西进来，
+  // done = 这段长到足以算一次有意义的检测
+  useEffect(() => {
+    if (empty) return;
+    track('run', TOOL);
+    if (report.stats.charCount >= MEANINGFUL_CHARS) track('done', TOOL);
+  }, [empty, report.stats.charCount]);
+
   async function copyReport() {
     await navigator.clipboard.writeText(toPlainText(report));
+    track('take', TOOL);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   }
@@ -51,7 +69,7 @@ export default function AiFlavor() {
         <h1 className={styles.title}>AI味检测</h1>
         <p className={styles.sub}>
           粘一段文字，告诉你哪几句露了馅、在第几段。
-          <strong>9 条规则写死在代码里，不调 AI</strong> —— 不上传、断网也能用。
+          <strong>9 条规则写死在代码里，不调 AI</strong> —— 你的文字不会离开浏览器，断网也能用。
         </p>
         <div className={styles.steps}>
           <span className={styles.step}>
@@ -180,6 +198,10 @@ export default function AiFlavor() {
                   </ul>
                   <p className={styles.formula}>
                     规则是确定的，同一段文字每次检测结果都一样。模型会临场判断，所以它会漏。
+                  </p>
+                  <p className={styles.formula}>
+                    检测全在你的浏览器里完成，文字不会发出去。只有 4 个匿名事件
+                    （打开 / 开始检测 / 完成 / 复制报告）会上报，用来知道这个工具有没有人用。
                   </p>
                 </details>
               </>

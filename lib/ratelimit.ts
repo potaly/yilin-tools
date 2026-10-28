@@ -156,6 +156,19 @@ export async function release(id: string): Promise<void> {
   }
 }
 
+/**
+ * 单层滑动窗口限流，给 AI 排版之外的轻量接口用（埋点）。
+ * 不加锁、不记预算，超限就返回 false 让调用方静默丢弃。
+ */
+export async function allow(
+  name: string,
+  id: string,
+  max: number,
+  seconds: number,
+): Promise<boolean> {
+  return (await check(name, id, max, seconds, 1, '')) === null;
+}
+
 /** 逐层检查；返回 ok 时调用方必须在结束后调用 release(id) */
 export async function guard(id: string, cost: number): Promise<GuardResult> {
   const burst = parseWindow(process.env.RATE_LIMIT_BURST || '', 2, 10);
