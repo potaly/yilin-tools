@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="shell siteHeaderInner">
             <a className="brand" href="/">
               <span className="brandMark" aria-hidden="true">
-                Y
+                {SITE.mark}
               </span>
               {SITE.name}
             </a>
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <footer className="shell siteFooter">
           <span>{SITE.name}</span>
-          <span>图片在你的浏览器里生成，文字不会上传，除非你点「AI 排版」</span>
+          <span>文字和图片都在你自己的浏览器里处理，不会上传，除非你点「AI 排版」</span>
         </footer>
       </body>
     </html>

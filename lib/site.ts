@@ -1,9 +1,11 @@
 /** 站点配置与工具注册表：加新工具只需在这里加一条，再建 app/tools/<slug>/page.tsx */
 
 export const SITE = {
-  name: 'Yilin 工具箱',
-  tagline: '几个趁手的小工具，打开就能用',
-  description: '把长文变成手机长图卡片，AI 一键排版，随手保存成图片或 PDF。',
+  name: '一人造物',
+  /** 顶栏左上角那个小方块里的字 */
+  mark: '造',
+  tagline: '一个人用 AI 造东西，造好的免费放着',
+  description: '查文字里的 AI 味，把长文排成手机长图卡片。打开就用，不用注册。',
 } as const;
 
 export interface ToolMeta {
@@ -17,6 +19,14 @@ export interface ToolMeta {
 }
 
 export const TOOLS: ToolMeta[] = [
+  {
+    slug: 'ai-flavor',
+    name: 'AI味检测',
+    summary: '查文字里的 AI 味',
+    detail: '粘一段文字，指出哪几句露了馅、具体在第几段。9 条规则写死在代码里，不调 AI。',
+    icon: 'scan',
+    ready: true,
+  },
   {
     slug: 'longform-cards',
     name: '长文图卡',

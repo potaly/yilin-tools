@@ -16,7 +16,7 @@ export default function HomePage() {
         {ready.map((tool) => (
           <a key={tool.slug} className={styles.card} href={toolPath(tool.slug)}>
             <span className={styles.cardIcon} aria-hidden="true">
-              <CardsIcon />
+              <ToolIcon name={tool.icon} />
             </span>
             <span className={styles.cardName}>{tool.name}</span>
             <span className={styles.cardDetail}>{tool.detail}</span>
@@ -33,6 +33,33 @@ export default function HomePage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** 按注册表里的 icon 字段选图标，加工具时只需在这里补一个分支 */
+function ToolIcon({ name }: { name: string }) {
+  if (name === 'scan') return <ScanIcon />;
+  return <CardsIcon />;
+}
+
+function ScanIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path d="M3.5 12h17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M7.5 8.2h9M7.5 15.8h5.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity=".45"
+      />
+    </svg>
   );
 }
 
