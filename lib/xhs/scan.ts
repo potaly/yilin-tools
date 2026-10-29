@@ -135,3 +135,19 @@ export function hardHits(text: string): string[] {
     .filter((i) => i.severity === 'hard')
     .flatMap((i) => i.hits);
 }
+
+/**
+ * 新生成内容的闸门用它：hard 和 soft 都要。
+ *
+ * 这是 playbook.md 第七节最后一条定的口径，两种情况严格程度不同：
+ * **用户自己的原文**里有风险词，照用并提醒（那是他的稿子，他有权决定）；
+ * **你新写的**标题、正文、选题里必须避开 —— 没有任何理由让工具主动吐出
+ * 一个「祛湿」或者「最有效」，那是工具自己惹的祸，不是用户的选择。
+ */
+export function riskHits(text: string): { hard: string[]; soft: string[] } {
+  const issues = scanText(text);
+  return {
+    hard: issues.filter((i) => i.severity === 'hard').flatMap((i) => i.hits),
+    soft: issues.filter((i) => i.severity === 'soft').flatMap((i) => i.hits),
+  };
+}

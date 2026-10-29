@@ -38,9 +38,36 @@ export default function HomePage() {
 
 /** 按注册表里的 icon 字段选图标，加工具时只需在这里补一个分支 */
 function ToolIcon({ name }: { name: string }) {
+  if (name === 'grid') return <GridIcon />;
+  if (name === 'pen') return <PenIcon />;
   if (name === 'wand') return <WandIcon />;
   if (name === 'scan') return <ScanIcon />;
   return <CardsIcon />;
+}
+
+function GridIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="7.5" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.6" opacity=".45" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.6" opacity=".45" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function PenIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4L19.3 8.7a2.4 2.4 0 0 0 0-3.4l-.6-.6a2.4 2.4 0 0 0-3.4 0L4 16v4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M14.2 5.8 18.2 9.8" stroke="currentColor" strokeWidth="1.6" opacity=".45" />
+    </svg>
+  );
 }
 
 function WandIcon() {
