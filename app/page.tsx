@@ -38,8 +38,31 @@ export default function HomePage() {
 
 /** 按注册表里的 icon 字段选图标，加工具时只需在这里补一个分支 */
 function ToolIcon({ name }: { name: string }) {
+  if (name === 'wand') return <WandIcon />;
   if (name === 'scan') return <ScanIcon />;
   return <CardsIcon />;
+}
+
+function WandIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20 15.5 8.5M14 4.2l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19.5 13.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6.6-1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity=".45"
+      />
+    </svg>
+  );
 }
 
 function ScanIcon() {

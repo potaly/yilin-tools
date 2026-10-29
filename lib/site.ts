@@ -5,7 +5,7 @@ export const SITE = {
   /** 顶栏左上角那个小方块里的字 */
   mark: '造',
   tagline: '一个人用 AI 造东西，造好的免费放着',
-  description: '查文字里的 AI 味，把长文排成手机长图卡片。打开就用，不用注册。',
+  description: '把 AI 写的文案改成人话，查文字里的 AI 味，把长文排成手机长图卡片。打开就用，不用注册。',
 } as const;
 
 export interface ToolMeta {
@@ -19,6 +19,15 @@ export interface ToolMeta {
 }
 
 export const TOOLS: ToolMeta[] = [
+  {
+    slug: 'humanize',
+    name: '去AI味',
+    summary: '一键改成人话',
+    detail:
+      '粘一段文案，标出哪几句露了馅、哪些词会被限流，再给你一版改好的。违禁词表写在代码里，不靠模型判断。',
+    icon: 'wand',
+    ready: true,
+  },
   {
     slug: 'ai-flavor',
     name: 'AI味检测',

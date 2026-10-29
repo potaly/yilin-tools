@@ -111,26 +111,35 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function checkBudget(cost: number): Promise<GuardFail | null> {
+/**
+ * 全站当日 AI 调用预算。每个工具一个独立的计数键，但共用同一个上限环境变量 ——
+ * 上限防的是账单，按工具分开防不住。
+ *
+ * @param name 工具名，只用来分键，方便在后台看哪个工具吃掉了预算
+ */
+export async function checkDailyBudget(
+  name: string,
+  cost: number,
+  error: string,
+): Promise<GuardFail | null> {
   const redis = getRedis();
   const cap = num(process.env.AI_DAILY_BUDGET, 2000);
   if (!redis) return null;
   try {
-    const key = nsKey(`budget:ai-format:${today()}`);
+    const key = nsKey(`budget:${name}:${today()}`);
     const used = await redis.incrby(key, cost);
     if (used === cost) await redis.expire(key, 172800);
     if (used > cap) {
-      return {
-        ok: false,
-        status: 503,
-        error: '今天的 AI 排版额度已用完，请明天再试',
-        retryAfter: 3600,
-      };
+      return { ok: false, status: 503, error, retryAfter: 3600 };
     }
   } catch (e) {
     console.error('[ratelimit] 预算检查失败:', (e as Error).message);
   }
   return null;
+}
+
+function checkBudget(cost: number): Promise<GuardFail | null> {
+  return checkDailyBudget('ai-format', cost, '今天的 AI 排版额度已用完，请明天再试');
 }
 
 async function acquireLock(id: string): Promise<GuardFail | null> {

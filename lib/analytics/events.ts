@@ -28,6 +28,11 @@ export interface TrackInput {
   tool: string;
 }
 
+/** vid 是不是合法的匿名 id。接口入口共用，别在各处再手写一遍正则 */
+export function isVid(x: unknown): x is string {
+  return typeof x === 'string' && VID_RE.test(x);
+}
+
 export function isEvent(x: unknown): x is EventName {
   return typeof x === 'string' && (EVENTS as readonly string[]).includes(x);
 }
