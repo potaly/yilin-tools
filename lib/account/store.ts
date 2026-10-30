@@ -52,6 +52,8 @@ const K = {
   statsUser: (id: string) => nsKey(`stats:user:${id}`),
   /** 一天一个 hash，字段是「IP|指标」，一次 hgetall 就能拿到当天所有 IP */
   statsIpDay: (day: string) => nsKey(`stats:ipday:${day}`),
+  /** 同上，字段是「工具|指标」。分工具存才答得了「哪个工具贵」 */
+  statsToolDay: (day: string) => nsKey(`stats:toolday:${day}`),
 };
 
 const SESSION_TTL = 60 * 60 * 24 * 30; // 30 天
@@ -232,31 +234,59 @@ export async function takeCredits(
 /* ---------- 用量统计 ---------- */
 
 export interface UsageRecord extends Usage {
+  /**
+   * 内容分块数。长文排版按段落切块并行，切成几块就是几；
+   * 不分块的工具恒为 1。**这是历史口径，不要改成请求数** —— 老数据
+   * 都是按这个含义累加的，改了就再也分不开。
+   */
   chunks: number;
+  /**
+   * 实际打出去的上游请求数，含结构重试和 chatJSON 内部的参数降级重打。
+   * 2026-10-30 才开始记，在那之前的行里是 0，不代表当时没有重试。
+   */
+  requests: number;
+  /** 输入字数。**只有长度，不存正文** */
   chars: number;
   costCny: number;
   credits: number;
+  /** 这次请求最后是失败收场的话填 1。token 照付，所以失败也要记成本 */
+  fails?: number;
 }
 
 /** IP 和指标名之间的分隔符。IPv6 本身带冒号，所以不能用冒号 */
 const IP_FIELD_SEP = '|';
 const IP_STATS_DAYS = 45;
 
+/**
+ * 记一次用量。
+ *
+ * `tool` 传了就额外写一份按工具分的当天 hash —— 不分工具的话所有调用混在
+ * 一起，答不了「哪个工具贵、哪个工具的结果没人要」。
+ *
+ * 成本只写 `costMicro`（微元）。`costFen` 已停写，见下面字段里的注释和
+ * credits.ts 里 costMicro() 的说明。
+ */
 export async function recordUsage(
   userId: string | null,
   u: UsageRecord,
   ip?: string,
+  tool?: string,
 ): Promise<void> {
   const r = getRedis();
   if (!r) return;
   const day = today();
   const fields: [string, number][] = [
     ['calls', 1],
+    ['fails', u.fails ?? 0],
     ['chunks', u.chunks],
+    ['requests', u.requests],
     ['chars', u.chars],
     ['promptTokens', u.promptTokens],
     ['completionTokens', u.completionTokens],
-    ['costFen', Math.round(u.costCny * 100)],
+    // 只写微元。**不能两个字段都写同一笔钱** —— 那样一个 hash 里会混着
+    // 「老写法记过的」和「新写法记过的」，读的时候没法分辨哪部分重复。
+    // 停写之后 costFen 是一截冻住的历史余额，直接和微元相加就是总数。
+    ['costMicro', Math.round(u.costCny * 1_000_000)],
     ['credits', u.credits],
   ];
   try {
@@ -264,9 +294,13 @@ export async function recordUsage(
       ...fields.map(([f, v]) => r.hincrby(K.statsDay(day), f, v)),
       ...(userId ? fields.map(([f, v]) => r.hincrby(K.statsUser(userId), f, v)) : []),
       ...(ip ? fields.map(([f, v]) => r.hincrby(K.statsIpDay(day), `${ip}${IP_FIELD_SEP}${f}`, v)) : []),
+      ...(tool
+        ? fields.map(([f, v]) => r.hincrby(K.statsToolDay(day), `${tool}${IP_FIELD_SEP}${f}`, v))
+        : []),
     ]);
     await r.expire(K.statsDay(day), 60 * 60 * 24 * 400);
     if (ip) await r.expire(K.statsIpDay(day), 60 * 60 * 24 * IP_STATS_DAYS);
+    if (tool) await r.expire(K.statsToolDay(day), 60 * 60 * 24 * 400);
   } catch (e) {
     console.error('[stats] 写用量失败:', (e as Error).message);
   }
@@ -274,17 +308,42 @@ export async function recordUsage(
 
 export interface StatsRow {
   calls: number;
+  /** 其中失败收场的次数。成功完成数 = calls - fails */
+  fails: number;
+  /** 内容分块数（历史口径，一直是这个含义） */
   chunks: number;
+  /** 上游请求数。2026-10-30 起才有，更早的行是 0 */
+  requests: number;
   chars: number;
   promptTokens: number;
   completionTokens: number;
+  /**
+   * 2026-10-30 之前写的历史成本，按分取整，误差很大。**已停写**，
+   * 所以它是一截不再增长的余额，不和 costMicro 重叠。
+   */
   costFen: number;
+  /** 权威成本口径，微元（百万分之一元）。这之后的调用只写这里 */
+  costMicro: number;
   credits: number;
 }
 
-const EMPTY_STATS: StatsRow = {
-  calls: 0, chunks: 0, chars: 0, promptTokens: 0, completionTokens: 0, costFen: 0, credits: 0,
+/** 空统计行。导出是为了让调用方兜底时别再手抄一遍字段 —— 抄漏了会算出 NaN */
+export const EMPTY_STATS: StatsRow = {
+  calls: 0, fails: 0, chunks: 0, requests: 0, chars: 0, promptTokens: 0, completionTokens: 0,
+  costFen: 0, costMicro: 0, credits: 0,
 };
+
+/**
+ * 这一行实际花了多少元。
+ *
+ * 两段**相加**，不是二选一：`costFen` 记的是停写之前那段历史，`costMicro`
+ * 记的是之后的，两者不重叠。跨越改动日的那一天、以及所有累计型的 hash
+ * （`stats:user:*` 是终身累加的）都会同时有值 —— 早先那版「costMicro 有值
+ * 就只读微元」会把当天的历史金额整段丢掉。
+ */
+export function costYuan(s: StatsRow): number {
+  return s.costMicro / 1_000_000 + s.costFen / 100;
+}
 
 function toStats(raw: Record<string, unknown> | null): StatsRow {
   const out = { ...EMPTY_STATS };
@@ -312,25 +371,72 @@ export interface IpRow {
   stats: StatsRow;
 }
 
-/** 把一天的扁平 hash（字段形如 "1.2.3.4|calls"）还原成一行一个 IP */
-export function parseIpDay(day: string, raw: Record<string, unknown> | null): IpRow[] {
-  if (!raw) return [];
-  const byIp = new Map<string, StatsRow>();
+/**
+ * 把一天的扁平 hash（字段形如 "1.2.3.4|calls" 或 "humanize|calls"）按前缀归成行。
+ *
+ * 用 lastIndexOf 找分隔符：IPv6 自带冒号，但分隔符是 `|`，所以前缀里允许出现
+ * 任何字符，只有最后一个 `|` 之后的才是指标名。
+ */
+function groupFlat(raw: Record<string, unknown> | null): Map<string, StatsRow> {
+  const out = new Map<string, StatsRow>();
+  if (!raw) return out;
   for (const [field, value] of Object.entries(raw)) {
     const at = field.lastIndexOf(IP_FIELD_SEP);
     if (at <= 0) continue;
-    const ip = field.slice(0, at);
+    const key = field.slice(0, at);
     const metric = field.slice(at + 1) as keyof StatsRow;
     if (!(metric in EMPTY_STATS)) continue;
     const n = Number(value);
     if (!Number.isFinite(n)) continue;
-    const row = byIp.get(ip) ?? { ...EMPTY_STATS };
+    const row = out.get(key) ?? { ...EMPTY_STATS };
     row[metric] = n;
-    byIp.set(ip, row);
+    out.set(key, row);
   }
-  return [...byIp.entries()]
+  return out;
+}
+
+/** 把一天的扁平 hash（字段形如 "1.2.3.4|calls"）还原成一行一个 IP */
+export function parseIpDay(day: string, raw: Record<string, unknown> | null): IpRow[] {
+  return [...groupFlat(raw).entries()]
     .map(([ip, stats]) => ({ day, ip, stats }))
     .sort((a, b) => b.stats.calls - a.stats.calls);
+}
+
+export interface ToolRow {
+  tool: string;
+  stats: StatsRow;
+}
+
+/** 把若干天的「工具|指标」hash 累加成一行一个工具 */
+export function sumToolDays(raws: (Record<string, unknown> | null)[]): ToolRow[] {
+  const total = new Map<string, StatsRow>();
+  for (const raw of raws) {
+    for (const [tool, stats] of groupFlat(raw)) {
+      const row = total.get(tool) ?? { ...EMPTY_STATS };
+      for (const k of Object.keys(EMPTY_STATS) as (keyof StatsRow)[]) row[k] += stats[k];
+      total.set(tool, row);
+    }
+  }
+  return [...total.entries()]
+    .map(([tool, stats]) => ({ tool, stats }))
+    // 按总额排，不是按微元 —— 否则历史金额大、新调用少的工具会被排到最后
+    .sort((a, b) => costYuan(b.stats) - costYuan(a.stats));
+}
+
+/** 近 days 天分工具的用量与成本，贵的在前。这就是「成本表」 */
+export async function getToolStats(days = 14): Promise<ToolRow[]> {
+  const r = getRedis();
+  if (!r) return [];
+  const raws: (Record<string, unknown> | null)[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10);
+    try {
+      raws.push(await r.hgetall(K.statsToolDay(d)));
+    } catch (e) {
+      console.error('[stats] 读工具用量失败:', (e as Error).message);
+    }
+  }
+  return sumToolDays(raws);
 }
 
 /** 近 days 天里每个 IP 每天的用量，按日期倒序、当天按次数多的在前 */

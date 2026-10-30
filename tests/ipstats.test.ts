@@ -16,7 +16,10 @@ describe('按 IP 的用量还原', () => {
     expect(rows[0]).toEqual({
       day: '2026-10-22',
       ip: '1.2.3.4',
-      stats: { calls: 3, chunks: 0, chars: 1500, promptTokens: 8000, completionTokens: 1200, costFen: 2, credits: 0 },
+      stats: {
+        calls: 3, fails: 0, chunks: 0, requests: 0, chars: 1500, promptTokens: 8000,
+        completionTokens: 1200, costFen: 2, costMicro: 0, credits: 0,
+      },
     });
   });
 

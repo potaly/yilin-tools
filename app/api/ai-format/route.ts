@@ -2,7 +2,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { currentAccount } from '@/lib/account/auth';
-import { costCny, creditsFor, type Usage } from '@/lib/account/credits';
+import { ZERO_USAGE, addUsage, costCny, creditsFor, type Usage } from '@/lib/account/credits';
 import { addCredits, getSettings, recordUsage, takeCredits } from '@/lib/account/store';
 import { chunkByParagraph, mergeResults } from '@/lib/ai/chunk';
 import { AiError, chatJSON, type ChatUsage } from '@/lib/ai/client';
@@ -30,26 +30,48 @@ function fail(error: string, status: number, extra?: Record<string, unknown>) {
 interface ChunkOutcome {
   result: FormatResult;
   usage: ChatUsage;
+  /** 这一块实际打出去几个上游请求（含结构重试和 chatJSON 内部的参数降级重试） */
+  requests: number;
 }
 
 /** 单块排版，结构不合法时重试 1 次 */
 async function formatChunk(cfg: AiConfig, text: string, allowTitle: boolean): Promise<ChunkOutcome> {
   const prompt = { system: SYSTEM_PROMPT, user: buildUserPrompt(text, { allowTitle }) };
   const spent: ChatUsage = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
+  let requests = 0;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const { data, usage } = await chatJSON(cfg, prompt);
-    spent.promptTokens += usage.promptTokens;
-    spent.cachedTokens += usage.cachedTokens;
-    spent.completionTokens += usage.completionTokens;
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { data, usage, requests: n } = await chatJSON(cfg, prompt);
+      requests += n;
+      spent.promptTokens += usage.promptTokens;
+      spent.cachedTokens += usage.cachedTokens;
+      spent.completionTokens += usage.completionTokens;
 
-    const parsed = validateShape(data);
-    if (parsed) {
-      return { result: allowTitle ? parsed : { ...parsed, title: '' }, usage: spent };
+      const parsed = validateShape(data);
+      if (parsed) {
+        return { result: allowTitle ? parsed : { ...parsed, title: '' }, usage: spent, requests };
+      }
+      console.warn(`[ai-format] 第 ${attempt + 1} 次返回的结构不合法，块长度=${text.length}`);
     }
-    console.warn(`[ai-format] 第 ${attempt + 1} 次返回的结构不合法，块长度=${text.length}`);
+    throw new AiError('两次返回的 JSON 结构都不合法', 'AI 返回的结果无法识别，请重试一次');
+  } catch (e) {
+    // 结构不合法的那两次是**拿到回复了的**，token 真花了；chatJSON 自己抛的
+    // 那次没拿到回复，它的 usage 是 0、requests 才是要补的。两种都靠这里带出去
+    if (e instanceof AiError) {
+      throw new AiError(e.message, e.userMessage, requests + e.requests, addUsage(spent, e.usage));
+    }
+    throw e;
   }
-  throw new AiError('两次返回的 JSON 结构都不合法', 'AI 返回的结果无法识别，请重试一次');
+}
+
+/** 从一个分块的结果或错误里取出它花掉的用量 —— 失败的分块也付了钱 */
+function spendOf(s: PromiseSettledResult<ChunkOutcome>): { usage: ChatUsage; requests: number } {
+  if (s.status === 'fulfilled') return { usage: s.value.usage, requests: s.value.requests };
+  const e = s.reason;
+  return e instanceof AiError
+    ? { usage: e.usage, requests: e.requests }
+    : { usage: ZERO_USAGE, requests: 0 };
 }
 
 export async function POST(req: NextRequest) {
@@ -101,6 +123,30 @@ export async function POST(req: NextRequest) {
     }
   };
 
+  /** 所有分块累计花掉的 token 与打出去的上游请求数，成功失败都往里加 */
+  let spent: Usage = ZERO_USAGE;
+  let upstream = 0;
+  /** 和 refunded 一样是防重的闸：失败路径记过之后，外层 catch 不能再记一遍 */
+  let recorded = false;
+  const record = async (ok: boolean) => {
+    if (recorded) return;
+    recorded = true;
+    await recordUsage(
+      account?.user.id ?? null,
+      {
+        ...spent,
+        chunks: chunks.length, // 内容分块数，和历史口径一致
+        requests: upstream, // 真实上游请求数，含结构重试与参数降级重打
+        chars: text.length,
+        costCny: costCny(spent),
+        credits: settings.billingEnabled ? credits : 0,
+        fails: ok ? 0 : 1,
+      },
+      id, // 没有登录时，IP 是唯一能区分用户的东西
+      'longform-cards', // 和 lib/site.ts 的 slug 对齐，后台按工具分表时才并得上
+    );
+  };
+
   try {
     const cfg = await getAiConfig();
     if (!cfg) {
@@ -108,32 +154,34 @@ export async function POST(req: NextRequest) {
       return fail('AI 排版暂未配置，请稍后再试', 503);
     }
 
-    const outcomes = await Promise.all(chunks.map((c, i) => formatChunk(cfg, c, i === 0)));
-    const merged = mergeResults(outcomes.map((o) => o.result));
+    // allSettled 而不是 all：一块失败时，其它块**已经付过钱了**，
+    // Promise.all 会把它们的用量一起扔掉
+    const settled = await Promise.allSettled(chunks.map((c, i) => formatChunk(cfg, c, i === 0)));
 
-    const usage: Usage = outcomes.reduce(
-      (acc, o) => ({
-        promptTokens: acc.promptTokens + o.usage.promptTokens,
-        cachedTokens: acc.cachedTokens + o.usage.cachedTokens,
-        completionTokens: acc.completionTokens + o.usage.completionTokens,
-      }),
-      { promptTokens: 0, cachedTokens: 0, completionTokens: 0 },
-    );
+    for (const s of settled) {
+      const { usage: u, requests: n } = spendOf(s);
+      spent = addUsage(spent, u);
+      upstream += n;
+    }
+
+    const failed = settled.filter((s) => s.status === 'rejected');
+    if (failed.length > 0) {
+      await refund(`${failed.length} 块失败，退回`);
+      await record(false);
+      const first = (failed[0] as PromiseRejectedResult).reason;
+      console.error(`[ai-format] ${failed.length}/${chunks.length} 块失败:`, (first as Error).message);
+      if (first instanceof AiError) return fail(first.userMessage, 502);
+      return fail('排版失败了，请稍后重试', 500);
+    }
+
+    const outcomes = settled.map((s) => (s as PromiseFulfilledResult<ChunkOutcome>).value);
+    const merged = mergeResults(outcomes.map((o) => o.result));
+    const usage: Usage = spent;
 
     const output = merged.title + merged.blocks.map((b) => b.text).join('');
     const rate = coverage(cleaned, output);
 
-    await recordUsage(
-      account?.user.id ?? null,
-      {
-        ...usage,
-        chunks: chunks.length,
-        chars: text.length,
-        costCny: costCny(usage),
-        credits: settings.billingEnabled ? credits : 0,
-      },
-      id, // 没有登录时，IP 是唯一能区分用户的东西
-    );
+    await record(true);
 
     console.log(
       `[ai-format] 完成 块数=${chunks.length} 字数=${text.length} 覆盖率=${rate.toFixed(3)}` +
@@ -150,6 +198,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     await refund('排版失败，退回');
+    // 走到这里说明是分块之后的环节炸了（合并、校验）。分块的钱已经付了，
+    // record() 自带防重，失败路径记过就不会再记一遍
+    if (e instanceof AiError) upstream += e.requests;
+    if (upstream > 0) await record(false);
     if (e instanceof AiError) {
       console.error('[ai-format] 失败:', e.message);
       return fail(e.userMessage, 502);

@@ -3,11 +3,30 @@
 import 'server-only';
 import type { AiConfig } from '@/lib/config/ai-config';
 
+export interface ChatUsage {
+  promptTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+}
+
+const NO_USAGE: ChatUsage = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
+
 /** 带中文用户提示的错误；message 只进日志，userMessage 才返回给前端 */
 export class AiError extends Error {
   constructor(
     message: string,
     readonly userMessage: string,
+    /** 抛出之前已经打出去几个上游请求 */
+    readonly requests = 0,
+    /**
+     * 抛出之前已经确认花掉的 token。
+     *
+     * chatJSON 自己抛错时这里是 0 —— 那次请求没拿到回复，用量未知。
+     * 但**调用方攒了好几轮再抛**的情况（见 ai-format 的 formatChunk：
+     * 两次返回的结构都不合法）token 是真花了的，必须带出来，否则这笔钱
+     * 在成本表里凭空消失。
+     */
+    readonly usage: ChatUsage = NO_USAGE,
   ) {
     super(message);
     this.name = 'AiError';
@@ -86,27 +105,29 @@ async function callOnce(cfg: AiConfig, prompt: Prompt, extras: boolean): Promise
   }
 }
 
-export interface ChatUsage {
-  promptTokens: number;
-  cachedTokens: number;
-  completionTokens: number;
-}
-
 export interface ChatResult {
   data: unknown;
   usage: ChatUsage;
+  /**
+   * 这次 chatJSON 实际打出去几个上游请求。
+   *
+   * 通常是 1，但对方不认 response_format 时会去掉参数再打一次 —— 那一次
+   * 被 400 拒掉，不计费，可是它确实是一个请求。调用方要统计请求数就得知道。
+   */
+  requests: number;
 }
-
-const NO_USAGE: ChatUsage = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
 
 /** 调一次模型并解析出 JSON；对方不支持 json mode 时自动去掉该参数重试 */
 export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<ChatResult> {
   let res: Response;
+  let requests = 0;
   try {
+    requests++;
     res = await callOnce(cfg, prompt, true);
     if (res.status === 400) {
       // 可能是不认 response_format 或 thinking，去掉这两个参数再试一次
       console.warn('[ai] 带可选参数的请求被拒，去掉后重试:', (await res.clone().text()).slice(0, 200));
+      requests++;
       res = await callOnce(cfg, prompt, false);
     }
   } catch (e) {
@@ -114,6 +135,7 @@ export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<ChatResul
     throw new AiError(
       `请求失败: ${(e as Error).message}`,
       aborted ? 'AI 响应超时了，文字太长可以分两次排版' : 'AI 服务暂时不可用，请稍后重试',
+      requests,
     );
   }
 
@@ -127,7 +149,7 @@ export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<ChatResul
           : res.status === 429
             ? 'AI 服务正忙，请稍后重试'
             : 'AI 服务暂时不可用，请稍后重试';
-    throw new AiError(`上游返回 ${res.status}: ${detail.slice(0, 200)}`, hint);
+    throw new AiError(`上游返回 ${res.status}: ${detail.slice(0, 200)}`, hint, requests);
   }
 
   const data = (await res.json().catch(() => null)) as {
@@ -150,10 +172,10 @@ export async function chatJSON(cfg: AiConfig, prompt: Prompt): Promise<ChatResul
     : NO_USAGE;
 
   const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new AiError('上游返回内容为空', 'AI 没有返回内容，请重试一次');
+  if (!content) throw new AiError('上游返回内容为空', 'AI 没有返回内容，请重试一次', requests);
   const parsed = extractJson(content);
   if (parsed === null) {
     console.error('[ai] 无法从回复中解析出 JSON，开头 160 字:', content.slice(0, 160));
   }
-  return { data: parsed, usage };
+  return { data: parsed, usage, requests };
 }

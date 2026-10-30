@@ -2,9 +2,12 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { checkAdmin } from '@/lib/account/admin';
 import {
+  costYuan,
+  EMPTY_STATS,
   getDailyStats,
   getIpStats,
   getSettings,
+  getToolStats,
   getUserStats,
   listUsers,
   type StatsRow,
@@ -18,8 +21,16 @@ import { GrantForm, SettingsForm } from './AdminForms';
 export const metadata: Metadata = { title: '后台', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-function yuan(fen: number): string {
-  return `¥${(fen / 100).toFixed(2)}`;
+/**
+ * 一次调用大约 ¥0.005–0.015，两位小数全是 ¥0.01 或 ¥0.00，看不出差别，
+ * 所以小额给 4 位。总额回到 2 位，免得一长串数字反而难读。
+ */
+function money(y: number): string {
+  return `¥${y >= 1 ? y.toFixed(2) : y.toFixed(4)}`;
+}
+
+function sumYuan(rows: StatsRow[]): number {
+  return rows.reduce((n, r) => n + costYuan(r), 0);
 }
 
 function day(iso: string): string {
@@ -60,7 +71,7 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, daily, users, ipRows, events, visitors, retention] = await Promise.all([
+  const [settings, daily, users, ipRows, events, visitors, retention, toolRows] = await Promise.all([
     getSettings(),
     getDailyStats(14),
     listUsers(),
@@ -68,6 +79,7 @@ export default async function AdminPage({
     getEventStats(14),
     getDailyVisitors(14),
     getRetention(),
+    getToolStats(14),
   ]);
   const visitorsByDay = new Map(visitors.map((v) => [v.day, v.count]));
   const eventTotals = events.reduce(
@@ -80,9 +92,7 @@ export default async function AdminPage({
   const perUser = await Promise.all(users.map((u) => getUserStats(u.id)));
   const rows = daily.map((d) => d.stats);
   // Redis 不可用时 daily 是空的，不能直接取 rows[0]
-  const todayStats: StatsRow = rows[0] ?? {
-    calls: 0, chunks: 0, chars: 0, promptTokens: 0, completionTokens: 0, costFen: 0, credits: 0,
-  };
+  const todayStats: StatsRow = rows[0] ?? EMPTY_STATS;
 
   return (
     <div className="shell">
@@ -105,8 +115,8 @@ export default async function AdminPage({
             </div>
             <div className={styles.card}>
               <div className={styles.cardLabel}>今日成本</div>
-              <div className={styles.cardValue}>{yuan(todayStats.costFen)}</div>
-              <div className={styles.cardNote}>近 14 天 {yuan(sum(rows, 'costFen'))}</div>
+              <div className={styles.cardValue}>{money(costYuan(todayStats))}</div>
+              <div className={styles.cardNote}>近 14 天 {money(sumYuan(rows))}</div>
             </div>
             <div className={styles.card}>
               <div className={styles.cardLabel}>账户数</div>
@@ -126,6 +136,54 @@ export default async function AdminPage({
               </div>
             </div>
           </div>
+        </section>
+
+        <section className={styles.panel}>
+          <span className={styles.panelTitle}>近 14 天分工具成本</span>
+          {toolRows.length === 0 ? (
+            <p className={styles.empty}>
+              还没有分工具的数据。这份记录是 2026-10-30 才加的，在那之前的调用没有留下工具维度。
+            </p>
+          ) : (
+            <div className={styles.scroll}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>工具</th>
+                    <th className={styles.num}>调用</th>
+                    <th className={styles.num}>失败</th>
+                    <th className={styles.num}>上游请求</th>
+                    <th className={styles.num}>成本</th>
+                    <th className={styles.num}>每次成功</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {toolRows.map((t) => {
+                    const done = t.stats.calls - t.stats.fails;
+                    return (
+                      <tr key={t.tool}>
+                        <td>{TOOLS.find((x) => x.slug === t.tool)?.name ?? t.tool}</td>
+                        <td className={styles.num}>{t.stats.calls}</td>
+                        <td className={styles.num}>{t.stats.fails}</td>
+                        <td className={styles.num}>{t.stats.requests || '—'}</td>
+                        <td className={styles.num}>{money(costYuan(t.stats))}</td>
+                        <td className={styles.num}>
+                          {done > 0 ? money(costYuan(t.stats) / done) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className={styles.empty}>
+            「上游请求」是真实打出去的请求数，含结构重试和参数降级重打，所以会大于调用次数；
+            显示「—」是 2026-10-30 之前的行，那时还没记这个指标，不代表当时没有重试。
+            失败的调用也记一行并计入成本，但**没拿到回复的那次请求 token 用量未知，按 0 记**
+            —— 不是真的没花钱，所以这里的金额是下限。
+            金额本身也是按写死的单价估的，不是账单；「每次被采用结果的成本」要等埋点把复制/改写接上才能算。
+          </p>
         </section>
 
         {daily.length === 0 && (
@@ -219,14 +277,15 @@ export default async function AdminPage({
         </section>
 
         <section className={styles.panel}>
-          <span className={styles.panelTitle}>AI 排版用量（近 14 天）</span>
+          <span className={styles.panelTitle}>AI 用量合计（近 14 天）</span>
           <div className={styles.scroll}>
             <table>
               <thead>
                 <tr>
                   <th>日期</th>
-                  <th className={styles.num}>排版次数</th>
+                  <th className={styles.num}>调用</th>
                   <th className={styles.num}>分块数</th>
+                  <th className={styles.num}>上游请求</th>
                   <th className={styles.num}>字数</th>
                   <th className={styles.num}>输入 token</th>
                   <th className={styles.num}>输出 token</th>
@@ -240,16 +299,22 @@ export default async function AdminPage({
                     <td>{d}</td>
                     <td className={styles.num}>{stats.calls}</td>
                     <td className={styles.num}>{stats.chunks}</td>
+                    <td className={styles.num}>{stats.requests || '—'}</td>
                     <td className={styles.num}>{stats.chars.toLocaleString()}</td>
                     <td className={styles.num}>{stats.promptTokens.toLocaleString()}</td>
                     <td className={styles.num}>{stats.completionTokens.toLocaleString()}</td>
-                    <td className={styles.num}>{yuan(stats.costFen)}</td>
+                    <td className={styles.num}>{money(costYuan(stats))}</td>
                     <td className={styles.num}>{stats.credits}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <p className={styles.empty}>
+            这张表是所有工具的合计。「分块数」一直是内容切块数；「上游请求」含重试，
+            2026-10-30 之前没记，显示「—」。2026-10-30 之前这里只有长文排版的数据，
+            三个小红书工具那之前的调用没有留下任何记录。
+          </p>
         </section>
 
         <section className={styles.panel}>
@@ -279,7 +344,7 @@ export default async function AdminPage({
                       <td className={styles.num}>{r.stats.chars.toLocaleString()}</td>
                       <td className={styles.num}>{r.stats.promptTokens.toLocaleString()}</td>
                       <td className={styles.num}>{r.stats.completionTokens.toLocaleString()}</td>
-                      <td className={styles.num}>{yuan(r.stats.costFen)}</td>
+                      <td className={styles.num}>{money(costYuan(r.stats))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -319,7 +384,7 @@ export default async function AdminPage({
                       <td className={styles.num}>
                         {(perUser[i].promptTokens + perUser[i].completionTokens).toLocaleString()}
                       </td>
-                      <td className={styles.num}>{yuan(perUser[i].costFen)}</td>
+                      <td className={styles.num}>{money(costYuan(perUser[i]))}</td>
                     </tr>
                   ))}
                 </tbody>

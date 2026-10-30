@@ -21,6 +21,34 @@ export interface Usage {
   completionTokens: number;
 }
 
+export const ZERO_USAGE: Usage = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
+
+/**
+ * 把多次上游调用的用量加起来。
+ *
+ * 三个小红书工具都有「没过闸门就带着残留词重来一次」的重试，长文排版则是
+ * 分块并行 —— 一次用户请求可能打好几次模型，**每一次的 token 都要付钱**，
+ * 所以成本必须按累计算，不能只记最后一次。
+ */
+export function addUsage(a: Usage, b: Usage): Usage {
+  return {
+    promptTokens: a.promptTokens + b.promptTokens,
+    cachedTokens: a.cachedTokens + b.cachedTokens,
+    completionTokens: a.completionTokens + b.completionTokens,
+  };
+}
+
+/**
+ * 成本的存储单位：微元（百万分之一元），取整后用 hincrby 累加。
+ *
+ * 不能用「分」：一次改写大约 ¥0.005–0.015，`Math.round(cny * 100)` 会把
+ * 它们全部压成 1 分（误差 -33%～+96%），更便宜的直接记成 0 —— 那样成本表
+ * 永远是零。微元下单次取整误差是 1e-6 元，累加一百万次才差一块钱。
+ */
+export function costMicro(usage: Usage): number {
+  return Math.round(costCny(usage) * 1_000_000);
+}
+
 /** 这次调用真实花了多少钱（人民币），用于后台算账 */
 export function costCny(usage: Usage): number {
   const cached = Math.max(0, Math.min(usage.cachedTokens, usage.promptTokens));
