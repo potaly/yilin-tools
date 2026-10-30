@@ -168,6 +168,8 @@ button {
   font-size: 14px;
   padding: 6px 10px;
   border-radius: var(--r-sm);
+  /* 窄屏上别把工具名从词中间断开（「小红书文 / 案」）；整条换行可以，断词不行 */
+  white-space: nowrap;
 }
 
 .navLink:hover {

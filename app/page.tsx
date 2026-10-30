@@ -1,3 +1,4 @@
+import PasteBox from './PasteBox';
 import { SITE, TOOLS, toolPath } from '@/lib/site';
 import styles from './page.module.css';
 
@@ -6,12 +7,24 @@ export default function HomePage() {
 
   return (
     <div className="shell">
+      {/*
+        首屏只做一件事：让有稿子的人立刻粘进来。
+        工具列表还在，但降到下面 —— 和粘贴框等重的四张卡片等于没做选择。
+      */}
       <section className={styles.hero}>
         <span className={styles.eyebrow}>打开就能用，不用注册</span>
         <h1 className={styles.title}>{SITE.tagline}</h1>
-        <p className={styles.lede}>{SITE.description}</p>
+        <PasteBox />
+        <p className={styles.quick}>
+          还没想好写什么？
+          <a href={toolPath('xhs-topics')}>找选题 →</a>
+          <span aria-hidden="true"> · </span>
+          要把长文排成图卡？
+          <a href={toolPath('longform-cards')}>去排版 →</a>
+        </p>
       </section>
 
+      <h2 className={styles.gridTitle}>或者直接挑一个工具</h2>
       <section className={styles.grid} aria-label="工具列表">
         {ready.map((tool) => (
           <a key={tool.slug} className={styles.card} href={toolPath(tool.slug)}>
@@ -32,6 +45,11 @@ export default function HomePage() {
           <span>更多工具陆续加进来</span>
         </div>
       </section>
+
+      {/* 作者署名降到这里：它解释了为什么没有注册墙，但它不是标题 */}
+      <p className={styles.maker}>
+        {SITE.name} · {SITE.maker}
+      </p>
     </div>
   );
 }
