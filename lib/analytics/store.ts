@@ -49,8 +49,9 @@ export async function recordEvent(vid: string, event: EventName, tool: string): 
 
 export type Funnel = Record<EventName, number>;
 
+/** 从 EVENTS 派生，别手写字面量 —— 加事件时漏掉一处就会在别处炸 */
 export function emptyFunnel(): Funnel {
-  return { open: 0, run: 0, done: 0, take: 0 };
+  return Object.fromEntries(EVENTS.map((e) => [e, 0])) as Funnel;
 }
 
 export interface DayEvents {

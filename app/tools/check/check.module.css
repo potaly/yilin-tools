@@ -489,3 +489,91 @@
   color: var(--ink-3);
   font-size: 12.5px;
 }
+
+/* ---- 合并自「AI味检测」：规则说明表 ---- */
+
+.ruleList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ruleList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weight {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 分组结果区 ---- */
+
+/* 顶部是计数不是分数：一个「安全分」会被当成通行证 */
+.tally {
+  color: var(--ink-2);
+}
+
+.tally strong {
+  color: var(--ink-1);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  margin-right: 3px;
+}
+
+.tallySep {
+  color: var(--ink-3);
+}
+
+.tallyOver strong,
+.tallyOver {
+  color: var(--bad, #b4433a);
+}
+
+.group {
+  margin-top: 18px;
+}
+
+.group:first-of-type {
+  margin-top: 10px;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.groupCount {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--line);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.groupNote {
+  margin: 5px 0 9px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+
+.cleanMeta {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}

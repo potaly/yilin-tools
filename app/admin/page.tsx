@@ -13,7 +13,7 @@ import {
   type StatsRow,
 } from '@/lib/account/store';
 import { EVENT_LABEL, EVENTS } from '@/lib/analytics/events';
-import { getDailyVisitors, getEventStats, getRetention } from '@/lib/analytics/store';
+import { emptyFunnel, getDailyVisitors, getEventStats, getRetention } from '@/lib/analytics/store';
 import { TOOLS } from '@/lib/site';
 import styles from './admin.module.css';
 import { GrantForm, SettingsForm } from './AdminForms';
@@ -27,6 +27,21 @@ export const dynamic = 'force-dynamic';
  */
 function money(y: number): string {
   return `¥${y >= 1 ? y.toFixed(2) : y.toFixed(4)}`;
+}
+
+/**
+ * 已经从 TOOLS 里退役、但成本数据还在的 slug。
+ *
+ * 「发布前检查」合并了去AI味和AI味检测，改写接口仍然叫 /api/humanize，
+ * 记成本时也还用 humanize —— 换 key 会把额度和成本记录一刀两断，不值得。
+ */
+const RETIRED: Record<string, string> = {
+  humanize: '发布前检查 · AI 改写',
+  'ai-flavor': 'AI味检测（已并入发布前检查）',
+};
+
+function toolName(slug: string): string {
+  return TOOLS.find((t) => t.slug === slug)?.name ?? RETIRED[slug] ?? slug;
 }
 
 function sumYuan(rows: StatsRow[]): number {
@@ -87,7 +102,7 @@ export default async function AdminPage({
       for (const e of EVENTS) acc[e] += d.total[e];
       return acc;
     },
-    { open: 0, run: 0, done: 0, take: 0 },
+    emptyFunnel(),
   );
   const perUser = await Promise.all(users.map((u) => getUserStats(u.id)));
   const rows = daily.map((d) => d.stats);
@@ -162,7 +177,7 @@ export default async function AdminPage({
                     const done = t.stats.calls - t.stats.fails;
                     return (
                       <tr key={t.tool}>
-                        <td>{TOOLS.find((x) => x.slug === t.tool)?.name ?? t.tool}</td>
+                        <td>{toolName(t.tool)}</td>
                         <td className={styles.num}>{t.stats.calls}</td>
                         <td className={styles.num}>{t.stats.fails}</td>
                         <td className={styles.num}>{t.stats.requests || '—'}</td>

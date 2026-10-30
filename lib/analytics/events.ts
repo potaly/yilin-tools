@@ -1,19 +1,26 @@
 /**
  * 埋点的事件定义与校验。前后端共用，所以这里不能引 server-only。
  *
- * 只认 4 个事件，刻意不做成可扩展的字符串 —— 事件表一旦放开就会长成
- * 一堆没人看的噪音。要加第 5 个，先回答"它能回答哪个我现在答不了的问题"。
+ * 事件表刻意不做成可扩展的字符串 —— 一旦放开就会长成一堆没人看的噪音。
+ * 要加一个，先回答"它能回答哪个我现在答不了的问题"。
+ *
+ * check 是这么加进来的：「发布前检查」的规则检查**不调 AI、不扣额度**，
+ * 原来的 run 只在点 AI 改写时才报，于是免费检查这条核心路径在漏斗里完全
+ * 看不见 —— 而它恰恰是这一轮要验证的东西。有了 check，才答得了两个问题：
+ * 粘进来的人里有多少真的看到了结果（check / open），
+ * 看到结果之后又有多少要了 AI 改写（run / check）。
  *
  * 事件体里只有「匿名 id + 事件名 + 工具名」。文字内容、标题、字数一律不发。
  */
 
 import { TOOLS } from '@/lib/site';
 
-export const EVENTS = ['open', 'run', 'done', 'take'] as const;
+export const EVENTS = ['open', 'check', 'run', 'done', 'take'] as const;
 export type EventName = (typeof EVENTS)[number];
 
 export const EVENT_LABEL: Record<EventName, string> = {
   open: '打开工具',
+  check: '免费检查出结果',
   run: '点生成',
   done: '生成成功',
   take: '复制或下载',

@@ -5,7 +5,8 @@ export const SITE = {
   /** 顶栏左上角那个小方块里的字 */
   mark: '造',
   tagline: '一个人用 AI 造东西，造好的免费放着',
-  description: '把 AI 写的文案改成人话，查文字里的 AI 味，把长文排成手机长图卡片。打开就用，不用注册。',
+  description:
+    '发小红书之前过一遍检查，拆选题、写文案，把长文排成手机长图卡片。打开就用，不用注册。',
 } as const;
 
 export interface ToolMeta {
@@ -20,12 +21,12 @@ export interface ToolMeta {
 
 export const TOOLS: ToolMeta[] = [
   {
-    slug: 'humanize',
-    name: '去AI味',
-    summary: '一键改成人话',
+    slug: 'check',
+    name: '发布前检查',
+    summary: '发之前过一遍',
     detail:
-      '粘一段文案，标出哪几句露了馅、哪些词会被限流，再给你一版改好的。违禁词表写在代码里，不靠模型判断。',
-    icon: 'wand',
+      '粘进来就分组列出：哪些词建议自己再核实、哪几句读起来像模板、长度有没有超。查表不靠模型，文字不离开浏览器。要的话再让 AI 改一版。',
+    icon: 'scan',
     ready: true,
   },
   {
@@ -44,14 +45,6 @@ export const TOOLS: ToolMeta[] = [
     detail:
       '先定搜索型还是发现型，再出 5–6 个标题候选（按冲收藏/冲流量/冲涨粉分组，单位数和核心词位置代码算），配正文和四层标签。',
     icon: 'pen',
-    ready: true,
-  },
-  {
-    slug: 'ai-flavor',
-    name: 'AI味检测',
-    summary: '查文字里的 AI 味',
-    detail: '粘一段文字，指出哪几句露了馅、具体在第几段。9 条规则写死在代码里，不调 AI。',
-    icon: 'scan',
     ready: true,
   },
   {

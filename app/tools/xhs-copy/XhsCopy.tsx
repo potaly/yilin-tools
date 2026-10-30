@@ -112,7 +112,7 @@ export default function XhsCopy() {
       title: result.titles[picked]?.text ?? '',
       body: result.fullBody,
     });
-    window.location.href = '/tools/humanize';
+    window.location.href = '/tools/check';
   }
 
   return (

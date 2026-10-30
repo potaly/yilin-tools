@@ -5,7 +5,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { analyze } from '@/lib/aiwei/engine';
-import { toPlainText } from '@/lib/aiwei/report';
 import { SAMPLE as AI_SAMPLE } from '@/lib/aiwei/sample';
 import { SAMPLE as HUMAN_SAMPLE } from '@/lib/cards/sample';
 
@@ -43,18 +42,5 @@ describe('analyze', () => {
         expect(s.end).toBeGreaterThan(s.start);
       }
     }
-  });
-});
-
-describe('toPlainText', () => {
-  it('包含分数、命中清单和署名', () => {
-    const text = toPlainText(analyze(AI_SAMPLE));
-    expect(text).toContain('AI味指数');
-    expect(text).toContain('命中');
-    expect(text).toContain('/tools/ai-flavor');
-  });
-
-  it('零命中时说清楚一条都没中', () => {
-    expect(toPlainText(analyze('今天买了三斤橘子，十二块。'))).toContain('一条都没命中');
   });
 });

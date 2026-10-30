@@ -1,12 +1,11 @@
-import type { Metadata } from 'next';
-import AiFlavor from './AiFlavor';
+import { permanentRedirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'AI味检测',
-  description:
-    '粘一段文字，指出哪几句露了馅、具体在第几段。9 条规则写死在代码里，不调 AI，断网也能用。',
-};
-
+/**
+ * 「AI味检测」已经并进「发布前检查」。
+ *
+ * 两个工具原来调的是同一套规则（analyze / scanDoc），拆成两个入口既分流量
+ * 也分用户心智。这里留一个永久跳转，旧链接和收藏不至于 404。
+ */
 export default function Page() {
-  return <AiFlavor />;
+  permanentRedirect('/tools/check');
 }

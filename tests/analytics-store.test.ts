@@ -16,9 +16,9 @@ describe('parseEventDay', () => {
       'longform-cards|open': 20,
     });
 
-    expect(out.byTool['ai-flavor']).toEqual({ open: 100, run: 40, done: 32, take: 7 });
-    expect(out.byTool['longform-cards']).toEqual({ open: 20, run: 0, done: 0, take: 0 });
-    expect(out.total).toEqual({ open: 120, run: 40, done: 32, take: 7 });
+    expect(out.byTool['ai-flavor']).toEqual({ ...emptyFunnel(), open: 100, run: 40, done: 32, take: 7 });
+    expect(out.byTool['longform-cards']).toEqual({ ...emptyFunnel(), open: 20 });
+    expect(out.total).toEqual({ ...emptyFunnel(), open: 120, run: 40, done: 32, take: 7 });
   });
 
   it('工具名里带连字符也能切对（按最后一个分隔符切）', () => {
@@ -28,7 +28,7 @@ describe('parseEventDay', () => {
 
   it('认不出的事件名直接跳过，不污染合计', () => {
     const out = parseEventDay('2026-10-28', { 'ai-flavor|hack': 99, 'ai-flavor|open': 1 });
-    expect(out.total).toEqual({ open: 1, run: 0, done: 0, take: 0 });
+    expect(out.total).toEqual({ ...emptyFunnel(), open: 1 });
   });
 
   it('坏数据不报错', () => {
