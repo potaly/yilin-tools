@@ -152,7 +152,7 @@ export interface ScoredTitle {
   over: number;
   /** 核心词落在第几个字（1 起），没出现是 null */
   keywordAt: number | null;
-  /** 核心词是否落在前 6 个字内 —— 搜索权重最高的位置 */
+  /** 核心词是否落在前 6 个字内。经验口径：靠前更容易被扫到，不是平台公开的权重规则 */
   keywordInHead: boolean;
 }
 

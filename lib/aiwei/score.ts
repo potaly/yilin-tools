@@ -1,8 +1,11 @@
 /**
- * 算分与分级。
+ * 算分与分级。**这两个值不出现在界面上，也不随接口返回。**
  *
- * 公式故意做得简单到可以印在页面上：命中规则的权重之和 ÷ 全部规则权重之和。
- * 别人做黑箱检测器，这里公开算法 —— 和"规则写进代码"是同一个姿态。
+ * 分数留着是因为它是规则引擎灵敏度的内部信号（见 tests/aiwei-engine.test.ts：
+ * AI 样本要高、真人样本要是 0）。但它不能给用户看 —— 一个 0–100 的数字会被
+ * 当成「这篇 95 分，能发」的凭据，而词表命中和平台判违规本来就是两回事。
+ * 原来的 LEVEL_TEXT（「一眼就是 AI 写的」）和 SCORE_FORMULA 就是这种判词，
+ * 合并成「发布前检查」时已经删掉，别再加回来。
  */
 
 import { TOTAL_WEIGHT } from './rules';
@@ -20,12 +23,3 @@ export function levelOf(score: number): Level {
   return 'heavy';
 }
 
-export const LEVEL_TEXT: Record<Level, string> = {
-  clean: '基本没有 AI 味',
-  light: '有一点痕迹，改两处就行',
-  obvious: 'AI 味明显',
-  heavy: '一眼就是 AI 写的',
-};
-
-/** 印在页面上的算法说明 */
-export const SCORE_FORMULA = `AI味指数 = 100 × 命中规则的权重之和 ÷ ${TOTAL_WEIGHT}（全部 9 条规则的权重之和）`;

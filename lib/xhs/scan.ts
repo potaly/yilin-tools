@@ -111,7 +111,7 @@ export interface ScanResult {
   text: string;
   issues: Issue[];
   limits: Limits;
-  /** 有硬错误或超限：这篇现在发不出去，或者发了会被限流 */
+  /** 有硬错误或超限：发之前一定要处理。不预测平台会怎么处置，只说这几处必须自己看 */
   blocking: boolean;
 }
 

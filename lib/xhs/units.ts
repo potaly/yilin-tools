@@ -14,7 +14,7 @@ import { WIDE_RANGES } from './wide-ranges';
 export const TITLE_MAX_UNITS = 20;
 /** 正文字符上限，**标签计入同一额度** */
 export const BODY_MAX_CHARS = 1000;
-/** 搜索型笔记，核心词应落在标题前 6 个字内 */
+/** 搜索型笔记，核心词建议落在标题前 6 个字内。经验口径，平台没有公开过权重规则 */
 export const KEYWORD_HEAD = 6;
 /** 标签建议区间 */
 export const TAG_MIN = 3;

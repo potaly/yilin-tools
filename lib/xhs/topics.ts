@@ -58,7 +58,7 @@ export const MOTIVES: readonly MotiveMeta[] = [
     positioning: '推翻一个旧认知',
     pattern: '评论多，容易被转发',
     order: 3,
-    why: '收尾做互动，评论权重远高于点赞',
+    why: '收尾做互动，它最容易换来真回答而不是划走',
   },
 ];
 

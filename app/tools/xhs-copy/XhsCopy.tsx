@@ -178,7 +178,8 @@ export default function XhsCopy() {
                   maxLength={30}
                 />
                 <p className={styles.why}>
-                  它必须落在标题前 6 个字内 —— 搜索权重最高的位置。每个候选会标出它落在第几个字。
+                  经验：核心词尽量靠前，读者在信息流里扫一眼就能看到，搜的人也更容易对上。
+                  每个候选会标出它落在第几个字。
                 </p>
               </div>
             )}
@@ -483,7 +484,7 @@ function BodyPanel({
           {copied === 'body' ? '已复制' : '只复制正文'}
         </button>
         <button className="btn btnSm btnQuiet" onClick={onHumanize}>
-          拿去查 AI 味 →
+          发之前检查一遍 →
         </button>
       </div>
     </div>

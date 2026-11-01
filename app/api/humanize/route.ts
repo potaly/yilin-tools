@@ -178,12 +178,10 @@ export async function POST(req: NextRequest) {
       /** 改之前的问题清单（代码扫的，权威） */
       issues: scan.issues,
       findings: report.findings,
-      score: report.score,
       /** 改之后还剩什么，如实给出 —— 闸门没拦住的要让用户知道 */
       after: {
         issues: after.issues,
         limits: after.limits,
-        score: analyze(result.body).score,
       },
       ...(verdict.ok ? {} : { warning: warningOf(verdict.leftover, verdict.stillOver) }),
       quota: { limit: taken.limit, used: taken.used, left: taken.left, scope: taken.scope },

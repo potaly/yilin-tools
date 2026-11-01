@@ -22,11 +22,31 @@ const MIN_CHARS = 20;
 /**
  * 结果分两组展示，**不合成一个分数**。
  *
- * 一个「安全分」会被当成平台审核的代理指标 —— 有人照着 95 分发出去被限流，
- * 这个工具的信任就没了。而词表命中和平台判违规本来就是两回事：
+ * 一个「安全分」会被当成平台审核的代理指标 —— 有人照着 95 分发出去被平台
+ * 处理了，这个工具的信任就没了。而词表命中和平台判违规本来就是两回事：
  * 词表是经验归纳，平台是模型加人工。
  *
  * 所以顶部只给**计数**（事实陈述），分组各自说清自己的口径。
+ *
+ * ---
+ *
+ * 这个页面上的文案有一张禁用表。改文案之前先看一眼，这几种说法都踩过线：
+ *
+ * | 不能说                      | 改说                          |
+ * |-----------------------------|-------------------------------|
+ * | 发出去会怎么样 / 能不能过审   | 看看有哪些地方要核实            |
+ * | 安全 / 零风险 / 不会限流      | 未命中词表 / 建议人工核实        |
+ * | 检测到 AI 生成               | 这几句读起来像模板              |
+ * | 体检（隐含「查完就没事」）     | 检查                           |
+ * | 必然 / 一定 / 保证涨粉        | 一律删掉                       |
+ *
+ * 共同点是**都在替平台下结论**。这个工具查的是词表和规则，查不了平台怎么判，
+ * 所以只陈述查到了什么，不预测会发生什么。同一套口径也适用于
+ * lib/xhs/words.ts 的 why 字段和 lib/xhs/report.ts 的导出报告。
+ *
+ * 断言分三档（方案 v4.1 §2.1）：平台明文规则可以直接陈述并给链接；
+ * 运营经验要标成「经验：…」；模型或代码推出来的要标成假设并给验证方法。
+ * 没有出处的算法断言（「搜索权重最高」「评论权重高于点赞」）一律不留。
  */
 type GroupId = 'words' | 'style';
 
@@ -76,7 +96,7 @@ function rowsOf(issues: Issue[], text: string): Row[] {
     spans: f.spans,
   }));
 
-  // 词表在前：会被限流的事比读起来像模板更急
+  // 词表在前：可能触线的事比读起来像模板更急
   return [...words.filter((r) => r.hard), ...words.filter((r) => !r.hard), ...style];
 }
 
@@ -85,8 +105,7 @@ interface Result {
   body: string;
   note: string;
   changes: { from: string; to: string; why: string }[];
-  score: number;
-  after: { score: number; issues: Issue[] };
+  after: { issues: Issue[] };
   warning?: string;
   quota?: { limit: number; used: number; left: number; scope: 'user' | 'anon' };
 }
@@ -481,9 +500,10 @@ export default function Check() {
           <div className={styles.panel}>
             <div className={styles.panelBar}>
               <span className={styles.panelTitle}>改好的一版</span>
+              {/* 只给条数变化。分数在检查结果里已经拿掉了，改写结果里再留一个等于白拿 */}
               <span className={styles.delta}>
-                AI味 {result.score} → <strong>{result.after.score}</strong> ·
-                问题 {rows.length} → <strong>{result.after.issues.length}</strong>
+                需核实的用词 {rows.filter((r) => r.group === 'words').length} →{' '}
+                <strong>{result.after.issues.length}</strong>
               </span>
             </div>
 
