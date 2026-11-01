@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  computeRetention,
-  emptyFunnel,
-  intersectCount,
-  parseEventDay,
-} from '@/lib/analytics/store';
+import { CHECK_FLOOR, computeRetention, emptyFunnel, intersectCount, parseEventDay, type CheckFunnel } from '@/lib/analytics/store';
 
 describe('parseEventDay', () => {
   it('把扁平 hash 还原成按工具分组的漏斗', () => {
@@ -60,5 +55,24 @@ describe('computeRetention', () => {
 
   it('上周没人时 rate 是 null，不是 0 也不是 NaN', () => {
     expect(computeRetention([], ['a'])).toEqual({ lastWeek: 0, returned: 0, rate: null });
+  });
+});
+
+/**
+ * 第 14 天的决策口径用的是人数和交集，不是次数。
+ * 这几条守的是「分母不够就别读比例」那条规则 —— 小样本上的百分比是噪音。
+ */
+describe('CHECK_FLOOR 门槛', () => {
+  it('门槛是个正数，且不是 1', () => {
+    expect(CHECK_FLOOR).toBeGreaterThan(1);
+  });
+
+  it('分母不足时 enough 为假，界面据此不读比例', () => {
+    const below: CheckFunnel = {
+      checked: CHECK_FLOOR - 1, acted: 10, enough: false, floor: CHECK_FLOOR, days: 14,
+    };
+    expect(below.enough).toBe(false);
+    // 10/29 看着是 34%，但分母不够，这个数不该被读出来
+    expect(below.acted / below.checked).toBeGreaterThan(0.3);
   });
 });

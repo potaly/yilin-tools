@@ -107,6 +107,7 @@ export default function XhsCopy() {
 
   function toHumanize() {
     if (!result) return;
+    track('handoff', TOOL);
     putHandoff({
       from: TOOL,
       title: result.titles[picked]?.text ?? '',

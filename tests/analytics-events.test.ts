@@ -4,8 +4,10 @@ import { EVENTS, isEvent, isTool, parseTrack } from '@/lib/analytics/events';
 const VID = '3f2b9c1e-4a5d-4e8f-9a1b-2c3d4e5f6a7b';
 
 describe('isEvent / isTool', () => {
-  it('只认这 5 个事件', () => {
-    expect(EVENTS).toEqual(['open', 'check', 'run', 'done', 'take']);
+  it('只认这 8 个事件', () => {
+    expect(EVENTS).toEqual([
+      'open', 'input', 'check', 'run', 'done', 'take', 'handoff', 'feedback',
+    ]);
     expect(isEvent('open')).toBe(true);
     expect(isEvent('click')).toBe(false);
     expect(isEvent(1)).toBe(false);

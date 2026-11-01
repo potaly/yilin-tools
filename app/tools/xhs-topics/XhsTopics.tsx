@@ -75,6 +75,7 @@ export default function XhsTopics() {
   }
 
   function writeIt(item: TopicItem) {
+    track('handoff', TOOL);
     putHandoff({
       from: TOOL,
       title: item.title,

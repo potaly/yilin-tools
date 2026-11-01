@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { track } from '@/lib/analytics/visitor';
 import { putHandoff } from '@/lib/xhs/handoff';
 import styles from './page.module.css';
 
@@ -21,8 +22,19 @@ export default function PasteBox() {
   const [text, setText] = useState('');
   const ready = text.trim().length > 0;
 
+  /**
+   * 埋在「检查」这个工具名下，因为这个框就是检查的入口。
+   * 粘了没走的（input 有、handoff 没有）正是要看的那部分人 ——
+   * 它只用来判断首页看不看得懂，**不是价值指标**。
+   */
+  function onChange(v: string) {
+    setText(v);
+    if (v.trim().length > 0) track('input', 'check');
+  }
+
   function go() {
     if (!ready) return;
+    track('handoff', 'check');
     putHandoff({ from: 'home', body: text.trim() });
     window.location.href = '/tools/check';
   }
@@ -32,7 +44,7 @@ export default function PasteBox() {
       <textarea
         className={styles.pasteInput}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder="粘贴草稿、素材，或者 AI 写完的初稿…"
         spellCheck={false}
         rows={4}

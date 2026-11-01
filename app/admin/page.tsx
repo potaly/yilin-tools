@@ -13,7 +13,13 @@ import {
   type StatsRow,
 } from '@/lib/account/store';
 import { EVENT_LABEL, EVENTS } from '@/lib/analytics/events';
-import { emptyFunnel, getDailyVisitors, getEventStats, getRetention } from '@/lib/analytics/store';
+import {
+  emptyFunnel,
+  getCheckFunnel,
+  getDailyVisitors,
+  getEventStats,
+  getRetention,
+} from '@/lib/analytics/store';
 import { TOOLS } from '@/lib/site';
 import styles from './admin.module.css';
 import { GrantForm, SettingsForm } from './AdminForms';
@@ -86,7 +92,8 @@ export default async function AdminPage({
     );
   }
 
-  const [settings, daily, users, ipRows, events, visitors, retention, toolRows] = await Promise.all([
+  const [settings, daily, users, ipRows, events, visitors, retention, toolRows, checkFunnel] =
+    await Promise.all([
     getSettings(),
     getDailyStats(14),
     listUsers(),
@@ -95,6 +102,7 @@ export default async function AdminPage({
     getDailyVisitors(14),
     getRetention(),
     getToolStats(14),
+    getCheckFunnel(14),
   ]);
   const visitorsByDay = new Map(visitors.map((v) => [v.day, v.count]));
   const eventTotals = events.reduce(
@@ -151,6 +159,37 @@ export default async function AdminPage({
               </div>
             </div>
           </div>
+        </section>
+
+        <section className={styles.panel}>
+          <span className={styles.panelTitle}>第 14 天复盘口径（近 {checkFunnel.days} 天）</span>
+          <div className={styles.cards}>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>① 检查出过结果的人</div>
+              <div className={styles.cardValue}>{checkFunnel.checked}</div>
+              <div className={styles.cardNote}>独立访客，不是次数</div>
+            </div>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>② 其中又改写或复制走的</div>
+              <div className={styles.cardValue}>
+                {checkFunnel.enough
+                  ? `${Math.round((100 * checkFunnel.acted) / Math.max(1, checkFunnel.checked))}%`
+                  : '—'}
+              </div>
+              <div className={styles.cardNote}>
+                {checkFunnel.enough
+                  ? `${checkFunnel.acted} / ${checkFunnel.checked} 人`
+                  : `分母不足 ${checkFunnel.floor}，不读比例`}
+              </div>
+            </div>
+          </div>
+          <p className={styles.empty}>
+            这两个数是方案 v4.1 §6 第 14 天要看的口径，按**人数**算、两个集合取交集，
+            不是上面漏斗表里的次数 —— 次数会被少数人反复操作带偏，样本越小偏得越狠。
+            ①低于 {checkFunnel.floor} 人时比例一律不读，结论就是「继续观察」；
+            连续两个复盘点都不够，说明问题不在产品形态而在没人来，那就停产品迭代转获客。
+            这份数据 2026-11-01 才开始记，更早的行里没有。
+          </p>
         </section>
 
         <section className={styles.panel}>

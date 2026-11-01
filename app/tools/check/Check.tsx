@@ -120,6 +120,8 @@ export default function Check() {
   const [needLogin, setNeedLogin] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [copied, setCopied] = useState(false);
+  /** 反馈只收一次，收完换成一句谢谢 —— 反复点不会多发，track 本身也去重 */
+  const [voted, setVoted] = useState<'yes' | 'no' | null>(null);
   const firstMark = useRef<HTMLElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
 
@@ -153,6 +155,11 @@ export default function Check() {
 
   const { limits } = scan;
   const ready = debounced.body.trim().length >= MIN_CHARS;
+
+  // 开始输入。和 check 的区别：input 只说明他动手了，check 说明他真看到了结果
+  useEffect(() => {
+    if (debounced.body.trim() || debounced.title.trim()) track('input', TOOL);
+  }, [debounced]);
 
   // 免费检查没有「开始」按钮，所以「出了结果」就算用过一次。
   // 不用自己防重：track() 已经按 (工具, 事件) 在一次页面加载内去重了
@@ -436,6 +443,41 @@ export default function Check() {
                     )}
                   </div>
                 </section>
+
+                {/*
+                  前面那些事件只能说明「他把东西拿走了」，说明不了拿走的东西是好的。
+                  这一问是唯一能答「结果到底有没有用」的（方案 v4.1 §6 口径③）。
+                  只有两个按钮、不弹窗、不追问 —— 加一步就没人答了。
+                */}
+                <div className={styles.vote}>
+                  {voted ? (
+                    <span className={styles.voteThanks}>
+                      记下了{voted === 'no' && '，这类没帮上忙的会拿去调规则'}。
+                    </span>
+                  ) : (
+                    <>
+                      <span>这次检查有用吗？</span>
+                      <button
+                        className="btn btnSm"
+                        onClick={() => {
+                          setVoted('yes');
+                          track('feedback', TOOL);
+                        }}
+                      >
+                        有用
+                      </button>
+                      <button
+                        className="btn btnSm btnQuiet"
+                        onClick={() => {
+                          setVoted('no');
+                          track('feedback', TOOL);
+                        }}
+                      >
+                        没帮上忙
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 {error && (
                   <p className={styles.error}>
