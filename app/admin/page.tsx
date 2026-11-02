@@ -182,10 +182,25 @@ export default async function AdminPage({
                   : `分母不足 ${checkFunnel.floor}，不读比例`}
               </div>
             </div>
+            <div className={styles.card}>
+              <div className={styles.cardLabel}>③ 说有用的</div>
+              <div className={styles.cardValue}>
+                {checkFunnel.said.useful + checkFunnel.said.useless > 0
+                  ? `${checkFunnel.said.useful} / ${
+                      checkFunnel.said.useful + checkFunnel.said.useless
+                    }`
+                  : '—'}
+              </div>
+              <div className={styles.cardNote}>
+                说没用 {checkFunnel.said.useless} 人
+              </div>
+            </div>
           </div>
           <p className={styles.empty}>
-            这两个数是方案 v4.1 §6 第 14 天要看的口径，按**人数**算、两个集合取交集，
+            这几个数是方案 v4.1 §6 第 14 天要看的口径，按**人数**算、交集按天取，
             不是上面漏斗表里的次数 —— 次数会被少数人反复操作带偏，样本越小偏得越狠。
+            交集必须按天取：拿整窗口的两个大集合相交，会把「第 1 天改写、第 10 天才检查」
+            的人也算成「检查之后采取了行动」，方向正好反了。
             ①低于 {checkFunnel.floor} 人时比例一律不读，结论就是「继续观察」；
             连续两个复盘点都不够，说明问题不在产品形态而在没人来，那就停产品迭代转获客。
             这份数据 2026-11-01 才开始记，更早的行里没有。

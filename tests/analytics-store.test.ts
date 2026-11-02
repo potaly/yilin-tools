@@ -70,9 +70,59 @@ describe('CHECK_FLOOR 门槛', () => {
   it('分母不足时 enough 为假，界面据此不读比例', () => {
     const below: CheckFunnel = {
       checked: CHECK_FLOOR - 1, acted: 10, enough: false, floor: CHECK_FLOOR, days: 14,
+      said: { useful: 0, useless: 0 },
     };
     expect(below.enough).toBe(false);
     // 10/29 看着是 34%，但分母不够，这个数不该被读出来
     expect(below.acted / below.checked).toBeGreaterThan(0.3);
+  });
+});
+
+/**
+ * 口径②的方向。拿整窗口的两个大集合相交，会把「先改写、几天后才检查」的人
+ * 也算成「检查之后采取了行动」—— 那是反的。这里用一个纯函数复刻同日口径，
+ * 守住「跨天不算」这条规则本身。
+ */
+function actedSameDay(
+  byDay: { check: string[]; run: string[]; take: string[] }[],
+): { checked: number; acted: number } {
+  const checked = new Set<string>();
+  const acted = new Set<string>();
+  for (const d of byDay) {
+    const run = new Set(d.run);
+    const take = new Set(d.take);
+    for (const vid of d.check) {
+      checked.add(vid);
+      if (run.has(vid) || take.has(vid)) acted.add(vid);
+    }
+  }
+  return { checked: checked.size, acted: acted.size };
+}
+
+describe('口径②按天取交集', () => {
+  it('同一天检查又改写的算', () => {
+    const r = actedSameDay([{ check: ['a'], run: ['a'], take: [] }]);
+    expect(r).toEqual({ checked: 1, acted: 1 });
+  });
+
+  it('先改写、几天后才检查的不算 —— 顺序是反的', () => {
+    const r = actedSameDay([
+      { check: [], run: ['a'], take: [] }, // 第 1 天只改写
+      { check: ['a'], run: [], take: [] }, // 第 10 天才检查
+    ]);
+    expect(r).toEqual({ checked: 1, acted: 0 });
+  });
+
+  it('同一个人多天都走完，只算一个人', () => {
+    const r = actedSameDay([
+      { check: ['a'], run: ['a'], take: [] },
+      { check: ['a'], run: [], take: ['a'] },
+    ]);
+    expect(r).toEqual({ checked: 1, acted: 1 });
+  });
+
+  it('take 和 run 任一个都算采取了行动', () => {
+    const r = actedSameDay([{ check: ['a', 'b'], run: ['a'], take: ['b'] }]);
+    expect(r).toEqual({ checked: 2, acted: 2 });
   });
 });

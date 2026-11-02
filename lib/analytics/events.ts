@@ -18,10 +18,20 @@
  *   任何「粘贴率涨了 = 产品变好」的推论都是错的。
  * - handoff：工具之间的交接有没有人真的走（v4.1 §6 第 21 天口径⑦）。
  *   选题→文案→检查这条链一直是凭空设计的，没有一个数字说过有人走完。
- * - feedback：结果到底有没有用（§6 口径③）。前面那些都只能说明
+ * - useful / useless：结果到底有没有用（§6 口径③）。前面那些都只能说明
  *   「他把东西拿走了」，说明不了拿走的东西是好的。
  *
- * 再加第九个之前，先回答同样的问题。
+ * **为什么是两个事件而不是一个 feedback 带方向字段**：事件体只认
+ * `{vid, event, tool}` 三个字段，放开第四个就等于放开任意负载，而这张表
+ * 最该守住的就是「不收正文」。拆成两个事件名既不动 schema，后台漏斗表
+ * 也能直接读出来。
+ *
+ * 一个 feedback 是不够的：§6 口径③ 的分子是「反馈为**有帮助**的人数」、
+ * 分母是「提交反馈的人数」，只发一个事件的话分子恒等于分母，比例永远
+ * 100%，这个口径根本算不出来。界面上还写着「没帮上忙的会拿去调规则」——
+ * 那是一个数据兑现不了的承诺。
+ *
+ * 再加第十个之前，先回答同样的问题。
  *
  * 事件体里只有「匿名 id + 事件名 + 工具名」。文字内容、标题、字数一律不发。
  */
@@ -29,7 +39,7 @@
 import { TOOLS } from '@/lib/site';
 
 export const EVENTS = [
-  'open', 'input', 'check', 'run', 'done', 'take', 'handoff', 'feedback',
+  'open', 'input', 'check', 'run', 'done', 'take', 'handoff', 'useful', 'useless',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -41,7 +51,8 @@ export const EVENT_LABEL: Record<EventName, string> = {
   done: '生成成功',
   take: '复制或下载',
   handoff: '带去下一个工具',
-  feedback: '说了有没有用',
+  useful: '说了有用',
+  useless: '说了没用',
 };
 
 /** crypto.randomUUID() 的格式 */

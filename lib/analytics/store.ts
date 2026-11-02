@@ -179,31 +179,30 @@ export async function getRetention(): Promise<Retention> {
 
 /* ---------- 第 14 天复盘口径（方案 v4.1 §6） ---------- */
 
-/** 把若干天里做过某个事件的人并成一个集合 */
-async function doersOf(tool: string, event: EventName, days: number): Promise<Set<string>> {
+/** 某一天做过某个事件的人 */
+async function doersOnDay(tool: string, event: EventName, day: string): Promise<Set<string>> {
   const r = getRedis();
-  const out = new Set<string>();
-  if (!r) return out;
-  for (let i = 0; i < days; i++) {
-    try {
-      for (const vid of (await r.smembers(K.doers(dayKey(i), tool, event))) ?? []) out.add(vid);
-    } catch {
-      /* 读不到就当这天没有，不要让整块报表挂掉 */
-    }
+  if (!r) return new Set();
+  try {
+    return new Set<string>(((await r.smembers(K.doers(day, tool, event))) ?? []) as string[]);
+  } catch {
+    /* 读不到就当这天没有，不要让整块报表挂掉 */
+    return new Set();
   }
-  return out;
 }
 
 export interface CheckFunnel {
   /** 口径①：检查出过结果的独立访客数。**绝对值，不读比例** */
   checked: number;
-  /** 口径②的分子：①里又点了改写或复制走的人 */
+  /** 口径②的分子：①里**在同一天**又点了改写或复制走的人 */
   acted: number;
   /** 分母够不够。不够就别读比例 —— 见下面的注释 */
   enough: boolean;
   /** 读比例需要的最小分母 */
   floor: number;
   days: number;
+  /** 口径③：说有用的人数 / 提交过反馈的人数 */
+  said: { useful: number; useless: number };
 }
 
 /**
@@ -215,20 +214,55 @@ export interface CheckFunnel {
  */
 export const CHECK_FLOOR = 30;
 
-/** 口径①②。注意是**人数**不是次数，两个集合取交集 */
+/**
+ * 口径①②。注意是**人数**不是次数。
+ *
+ * 交集按**天**取，不是拿整个窗口的两个大集合相交 —— 后者会把「第 1 天改写、
+ * 第 10 天才检查」的人也算成「检查之后采取了行动」，方向正好反了。
+ *
+ * 同日仍然不等于同一次会话，但在这个工具上已经足够准：`rewrite()` 被
+ * `ready` 挡着，复制按钮所在的整块结果区也只在 `ready` 之后渲染，
+ * 而 `check` 正是 `ready` 时发的 —— **同一次页面加载里 check 必然在前**。
+ * 要做到严格排序得给每个 (人, 事件) 存时间戳，成本远高于它能多纠正的那点偏差。
+ */
 export async function getCheckFunnel(days = 14, tool = 'check'): Promise<CheckFunnel> {
-  const [checked, ran, took] = await Promise.all([
-    doersOf(tool, 'check', days),
-    doersOf(tool, 'run', days),
-    doersOf(tool, 'take', days),
+  const checked = new Set<string>();
+  const acted = new Set<string>();
+
+  for (let i = 0; i < days; i++) {
+    const day = dayKey(i);
+    const [c, ran, took] = await Promise.all([
+      doersOnDay(tool, 'check', day),
+      doersOnDay(tool, 'run', day),
+      doersOnDay(tool, 'take', day),
+    ]);
+    for (const vid of c) {
+      checked.add(vid);
+      if (ran.has(vid) || took.has(vid)) acted.add(vid);
+    }
+  }
+
+  // 口径③的两头各自是独立的人，不需要和 check 对齐，所以整窗口取并集就行
+  const [useful, useless] = await Promise.all([
+    unionOver(tool, 'useful', days),
+    unionOver(tool, 'useless', days),
   ]);
-  let acted = 0;
-  for (const vid of checked) if (ran.has(vid) || took.has(vid)) acted++;
+
   return {
     checked: checked.size,
-    acted,
+    acted: acted.size,
     enough: checked.size >= CHECK_FLOOR,
     floor: CHECK_FLOOR,
     days,
+    said: { useful: useful.size, useless: useless.size },
   };
+}
+
+/** 整个窗口里做过某事件的人，去重 */
+async function unionOver(tool: string, event: EventName, days: number): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < days; i++) {
+    for (const vid of await doersOnDay(tool, event, dayKey(i))) out.add(vid);
+  }
+  return out;
 }

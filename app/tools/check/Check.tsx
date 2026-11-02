@@ -480,7 +480,7 @@ export default function Check() {
                         className="btn btnSm"
                         onClick={() => {
                           setVoted('yes');
-                          track('feedback', TOOL);
+                          track('useful', TOOL);
                         }}
                       >
                         有用
@@ -489,7 +489,7 @@ export default function Check() {
                         className="btn btnSm btnQuiet"
                         onClick={() => {
                           setVoted('no');
-                          track('feedback', TOOL);
+                          track('useless', TOOL);
                         }}
                       >
                         没帮上忙
