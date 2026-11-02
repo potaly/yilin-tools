@@ -25,6 +25,7 @@ import { clearHeading, toggleBold, toggleHeading, type MarkupResult } from '@/li
 import { dropEmptyPages, paginate } from '@/lib/cards/paginate';
 import { makeSlug, parse, plain, toEditorText, wordCount } from '@/lib/cards/parse';
 import { SAMPLE } from '@/lib/cards/sample';
+import { takeHandoff } from '@/lib/xhs/handoff';
 import {
   DEFAULT_TEMPLATE,
   TEMPLATES,
@@ -228,16 +229,6 @@ export default function LongformCards() {
     return () => clearInterval(timer);
   }, [busy]);
 
-  // 草稿：进来时读一次。
-  // 保存只跟着用户的实际改动走，不用 useEffect——否则挂载那一轮会先用示例文字把草稿覆盖掉。
-  useEffect(() => {
-    try {
-      const draft = localStorage.getItem(DRAFT_KEY);
-      if (draft && draft.trim()) setText(draft);
-    } catch {
-      /* 隐私模式下读不到就算了 */
-    }
-  }, []);
 
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
@@ -250,6 +241,35 @@ export default function LongformCards() {
       /* 写不进去也不影响使用 */
     }
   }, []);
+
+  // 草稿：进来时读一次。
+  // 保存只跟着用户的实际改动走，不用 useEffect——否则挂载那一轮会先用示例文字把草稿覆盖掉。
+  //
+  // 从「发布前检查」带过来的内容**优先于草稿**：用户刚点了「排成图卡」，
+  // 那就是他现在要排的东西。但旧草稿会被顶掉，所以要说一声 —— 不弹窗，
+  // 一句 toast；交接是用户自己发起的，不该再拦他一下。
+  useEffect(() => {
+    let draft = '';
+    try {
+      draft = localStorage.getItem(DRAFT_KEY) ?? '';
+    } catch {
+      /* 隐私模式下读不到就算了 */
+    }
+
+    const handed = takeHandoff();
+    const brought = handed ? [handed.title, handed.body].filter(Boolean).join('\n\n').trim() : '';
+
+    if (brought) {
+      // 标题带过来时补一个大标题标记，省得用户自己再点一次「设为大标题」
+      const next = handed?.title ? `# ${handed.title}\n\n${handed.body ?? ''}`.trim() : brought;
+      setText(next);
+      saveDraft(next);
+      say(draft.trim() && draft.trim() !== next ? '已带过来，原来的草稿被替换了' : '已从发布前检查带过来');
+      return;
+    }
+
+    if (draft.trim()) setText(draft);
+  }, [saveDraft, say]);
 
   const syncHistoryFlags = useCallback(() => {
     setCanUndo(past.current.length > 0);

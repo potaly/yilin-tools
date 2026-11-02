@@ -7,7 +7,7 @@ import { analyze } from '@/lib/aiwei/engine';
 import { dedupe } from '@/lib/aiwei/match';
 import { ALL_RULES } from '@/lib/aiwei/rules';
 import type { Span } from '@/lib/aiwei/types';
-import { takeHandoff } from '@/lib/xhs/handoff';
+import { putHandoff, takeHandoff } from '@/lib/xhs/handoff';
 import { checkReport } from '@/lib/xhs/report';
 import { SAMPLE_BODY, SAMPLE_TITLE } from '@/lib/xhs/sample';
 import { scanDoc, type Issue } from '@/lib/xhs/scan';
@@ -230,6 +230,22 @@ export default function Check() {
     setTimeout(() => setCopied(false), 1800);
   }
 
+  /**
+   * 带去排成图卡。
+   *
+   * 只有一个按钮，但它总是带**当前最新的那一版** —— 改写过就带改写后的，
+   * 没改写就带输入框里的。放两个按钮（原文 / 改写版）会让人停下来想选哪个，
+   * 而这里几乎不存在「我要带没改过的那一版」这种需求。
+   */
+  function toCards() {
+    const title = result ? result.title : debounced.title;
+    const body = result ? result.body : debounced.body;
+    if (!body.trim()) return;
+    track('handoff', TOOL);
+    putHandoff({ from: TOOL, title, body });
+    window.location.href = '/tools/longform-cards';
+  }
+
   function fillSample() {
     setTitle(SAMPLE_TITLE);
     setBody(SAMPLE_BODY);
@@ -434,6 +450,9 @@ export default function Check() {
                     </button>
                     <button className="btn btnSm" onClick={copyReport}>
                       {copied ? '已复制' : '复制检查报告'}
+                    </button>
+                    <button className="btn btnSm btnQuiet" onClick={toCards}>
+                      排成图卡 →
                     </button>
                     {result?.quota && (
                       <span className={styles.quota}>
