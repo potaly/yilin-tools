@@ -139,7 +139,8 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 52px;
+  /* min-height 而不是 height：窄屏上导航会折行，钉死高度会让第二行挤到边界外 */
+  min-height: 52px;
 }
 
 .brand {
@@ -164,6 +165,8 @@ button {
 }
 
 .navLink {
+  display: inline-flex;
+  align-items: center;
   color: var(--ink-2);
   font-size: 14px;
   padding: 6px 10px;
@@ -266,5 +269,32 @@ button {
   * {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---- 窄屏顶栏 ---- */
+
+/*
+ * 手机上导航会折成两行。原来顶栏既 sticky 又钉死 52px，结果第二行被挤到
+ * 边界外（实测链接底部 y=54，顶栏只有 53），再加一个工具就会溢出。
+ *
+ * 解法是窄屏上让它长高、同时不再 sticky —— 长高的 sticky 顶栏会占掉
+ * 一百多像素的永久空间，而手机上纵向空间比随手可点的导航更值钱。
+ * 顺带把链接撑到 40px，29px 的触摸目标太小。
+ */
+@media (max-width: 640px) {
+  .siteHeader {
+    position: static;
+  }
+
+  .siteHeaderInner {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .navLink {
+    min-height: 40px;
   }
 }
